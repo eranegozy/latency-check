@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Latency Police</title>
+    <link href="//fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet" type="text/css">
+    <link rel="icon" type="image/png" href="/favicon.ico">
+    <script type="text/javascript" src="/socketcluster.js"></script>
+    <script type="text/javascript" src="/lowLag.js"></script>
+    <script type="text/javascript" src="/sm2/js/soundmanager2.js"></script>
+    <script src="//code.jquery.com/jquery-1.8.0.min.js"></script>
+    <audio id='crash'> 
+      <source src='audio/crash.mp3' type='audio/mpeg'> 
+      This browser does not support HTML Audio.
+    </audio>
+    <audio id='808'> 
+      <source src='audio/808.mp3' type='audio/mpeg'> 
+    </audio>
+    <style>
+
+      html {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        color: #666666;
+        display: table;
+        font-weight: 100;
+        font-family: 'Roboto', Helvetica, sans-serif;
+      }
+      a {
+        font-weight: 300;
+        color: #72B963;
+      }
+      .container {
+        display: table-cell;
+        text-align: center;
+        vertical-align: middle;
+      }
+      .content {
+        text-align: center;
+        display: inline-block;
+      }
+
+      .title {
+        font-size: 96px;
+        margin-bottom: 20px;
+      }
+
+      .text {
+        font-size: 24px;
+        margin-bottom: 20px;
+      }
+      .small {
+        font-size: 18px;
+      }
+
+      .button {
+        border-color: black;
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        background-color: #E33;
+        box-shadow: 0 9px #999;
+        color: #EEE;
+      }
+      .button:hover {background-color: #D33}
+
+      .button:active {
+        background-color: #C22;
+        box-shadow: 0 5px #666;
+        transform: translateY(4px);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="content">
+        <div class="title">
+          Press a Button
+        </div>
+       <button onmousedown="play('crash')" class="button"> Crash</button>
+       <button onmousedown="play('808')" class="button"> 808</button>
+      </div>
+    </div>
+    <script type="text/javascript">
+      const options = {
+        // secure: true,
+        // hostname: 'securedomain.com',
+        // port: 443,
+        // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
+      };
+      const socket = socketCluster.create(options);
+      var rec_play = socket.subscribe('play');
+      function play(sound) {
+        document.getElementById(sound).play();
+      }
+      rec_play.watch(function (sound){
+        console.log(sound)
+        play(sound);
+      });
+      /**
+       * NOTE: Be sure to replace the following sample logic with your own logic.
+       */
+
+      
+      
+
+      // Connect to SocketCluster server
+      
+      function send_play(sound) {
+        socket.publish('play', sound);
+      }
+      // Listen for lifecycle events emitted by SocketCluster
+      socket.on('error', function (err) {
+        console.error(err);
+      });
+
+      socket.on('connect', function () {
+        console.log('Socket is connected');
+      });
+
+      socket.on('subscribe', function (channelName) {
+        console.log(`Socket is subscribed to ${channelName}`);
+      });
+
+      // Listen for custom events
+
+      
+    </script>
+  </body>
+</html>

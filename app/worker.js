@@ -22,9 +22,17 @@ class Worker extends SCWorker {
       app.use(morgan('dev'));
     }
     app.use(serveStatic(path.resolve(__dirname, 'public')));
-    var ua;
-    app.use(useragent.express())
+    app.use(express.urlencoded());
+    app.use(express.json());
 
+    app.get('/operator', function(req, res){
+      res.sendFile(path.join(__dirname + '/public/password.html'));
+    });
+    app.post('/controller', function(req, res){
+
+      if (req.body.password == 'lagpolice') res.sendFile(path.join(__dirname + '/public/operator.html'));
+      else return res.status(401).send();
+    });
     // Listen for HTTP GET "/health-check".
     healthChecker.attach(this, app);
 

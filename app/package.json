@@ -15,8 +15,10 @@
   "dependencies": {
     "express": "^4.16.4",
     "express-useragent": "^1.0.13",
+    "ffmpeg": "0.0.4",
     "minimist": "1.2.0",
     "morgan": "^1.9.1",
+    "request": "^2.88.0",
     "sc-framework-health-check": "^2.0.0",
     "sc-hot-reboot": "^1.0.0",
     "scc-broker-client": "^6.1.0",

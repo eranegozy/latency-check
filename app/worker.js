@@ -1,6 +1,5 @@
 var SCWorker = require('socketcluster/scworker');
 var express = require('express');
-// var useragent = require('express-useragent')
 var serveStatic = require('serve-static');
 var path = require('path');
 var morgan = require('morgan');
@@ -17,6 +16,7 @@ class Worker extends SCWorker {
       // See https://github.com/expressjs/morgan for other available formats.
       app.use(morgan('dev'));
     }
+    
     var httpServer = this.httpServer;
     var scServer = this.scServer;
 
@@ -32,13 +32,12 @@ class Worker extends SCWorker {
     httpServer.on('request', app);
 
     scServer.on('connection', function (socket) {
-
       socket.on('disconnect', function () {
         // clearInterval(interval);
       });
 
     });
-    
+
   }
 }
 

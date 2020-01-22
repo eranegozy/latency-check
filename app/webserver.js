@@ -1,12 +1,13 @@
 var express = require('express');
-var useragent = require('express-useragent')
 var serveStatic = require('serve-static');
 var path = require('path');
 var request = require('request');
+var multer = require('multer');
+var fs = require('fs');
 
+var upload = multer();
 var app = express();
 
- 
 var httpServer = this.httpServer;
 
 app.use(serveStatic(path.resolve(__dirname, 'public')));
@@ -23,17 +24,8 @@ app.post('/controller', function(req, res){
 });
 
 app.post('/ua', function(nav){
-	// console.log('UA');
-	// console.log(nav)
   	console.log(nav.body);
 });
 
-app.post('/audio', function(nav){
-	console.log("AUDIO");
-  	console.log(nav.body);
-});
 port = 3000;
 app.listen(port, console.log("Starting Server at port " + port));
-
-
-

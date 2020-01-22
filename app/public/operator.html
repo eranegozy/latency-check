@@ -65,6 +65,7 @@
       }
     </style>
   </head>
+
   <body>
     <div class="container">
       <div class="content">
@@ -72,77 +73,50 @@
         <div class="title">
           Press a Button
         </div>
-       <button onmousedown="send_play('crash')" class="button"> Crash</button>
+       <button onmousedown="send_play('crash')" id = "rec" class="button"> Crash</button>
        <br>
        <br>
-
       </div>
       <br>
       <br>
       <div id = "time">
       </div>
-<!--       <div id = "to_time">
-      </div>
-      <div id = "back_time">
-      </div>
-      <div id = "roundtrip"> -->
 
-      <div>
-       <button id="record"> Record </button>
-       <button id="stop"> Stop </button>
-<!--        <br>
-      <audio controls id="tester"> 
-      </audio> -->
-    </div>
     <script type="text/javascript">
       var cTime;
       var mediaRecorder;
-      // if (navigator.mediaDevices){
-      //   navigator.mediaDevices.getUserMedia({audio: true, video: false}).then(function(stream){
-      //     mediaRecorder = new MediaRecorder(stream);
-      //     document.getElementById('record').onclick = function(){
-      //       console.log('startn')
-      //       mediaRecorder.start();
-      //     }
-      //     document.getElementById('stop').onclick = function(){
-      //       console.log('stop')
-      //       mediaRecorder.stop();
-      //     }
+      opt = {};
 
-      //     let chunks = [];
-      //     mediaRecorder.ondataavailable = function(e){
-      //       console.log (e.data);
-      //       chunks.push(e.data);
-      //     }
-      //     mediaRecorder.onstop = function(e) {
-      //       const blob = new Blob(chunks, {'type': 'audio/webm'});
-      //       const blob_v = new Blob(chunks, {'type': 'video/webm'});
-      //       const videoURL = window.URL.createObjectURL(blob_v);
-      //       const text_blob = new Blob(["Text Content"], {type: "text/plain"});
-      //       var fd = new FormData();
-      //       fd.append('txt', text_blob);
-      //       fd.append('bl', blob);
-      //       var xhr = new XMLHttpRequest();
-      //       xhr.open("POST", '/audio', true);
-      //       xhr.setRequestHeader('Content-Type', 'multipart/form-data');
-      //       xhr.send(fd);
-      //       chunks = [];
-      //       // const audioURL = URL.createObjectURL(blob);
-      //       // console.log(audioURL);
-      //       // document.getElementById('tester').src = audioURL;
-      //       // var a = document.createElement('a');
-      //       // a.href = audioURL;
-      //       // a.download = "Wowzers";
-      //       // a.click();
-            
-      //     }
-      //   });
+      //Create MediaRecorder
+      if (navigator.mediaDevices){
+        navigator.mediaDevices.getUserMedia({audio: true, video: false}).then(function(stream){
+          mediaRecorder = new MediaRecorder(stream, opt);
+          document.getElementById('rec').onclick = function(){
+            console.log('startn')
+            mediaRecorder.start();
+            setTimeout(() => {mediaRecorder.stop();}, 1000);
+          }
 
-      // }
-      
+          let chunks = [];
+          mediaRecorder.ondataavailable = function(e){
+            console.log (e.data);
+            chunks.push(e.data);
+          }
 
-       
-      
+          mediaRecorder.onstop = function(e) {
+            const blob = new Blob(chunks, {'type': 'audio/webm; codecs=opus'});
+            const blob_v = new Blob(chunks, {'type': 'video/webm'});
+            const videoURL = window.URL.createObjectURL(blob_v);
+            chunks = [];
+            const audioURL = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = audioURL;
+            a.download = "Wowzers";
+            a.click();
+          }
+        });
+
+      }
 
       const options = {
         // secure: true,
@@ -151,8 +125,10 @@
         // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
       };
       const socket = socketCluster.create(options);
-      var rec_play = socket.subscribe('rec_play');
-      rec_play.watch(function(j){
+
+      // Recieve Roundtrip times and Add them to the page
+      var send_time = socket.subscribe('send_time');
+      send_time.watch(function(j){
         rec_time = j.time;
         num = j.id;
         let now = Date.now()
@@ -162,12 +138,15 @@
         document.getElementById("time").innerHTML += num + "<br> Time to took " + to_time + 'ms' + "<br> Time back took " + back_time +"ms <br> Roundtrip took " + rt_time + 'ms <br> <br>';
 
       });
+
+      // Send play command to client
       function send_play(sound) {
         document.getElementById("time").innerHTML = ""
         cTime = Date.now()
         socket.publish('play', sound);
       }
-      // Listen for lifecycle events emitted by SocketCluster
+
+      // Log errors
       socket.on('error', function (err) {
         console.error(err);
       });
@@ -180,9 +159,7 @@
         console.log(`Socket is subscribed to ${channelName}`);
       });
 
-      // Listen for custom events
 
-      
     </script>
   </body>
 </html>

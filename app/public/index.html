@@ -4,71 +4,13 @@
     <title>Latency Check</title>
     <link href="//fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet" type="text/css">
     <link rel="icon" type="image/png" href="/favicon.ico">
-    <script type="text/javascript" src="/socketcluster.js"></script>
-    <audio id='crash'>
-      <source src='audio/crash.wav' type='audio/xwav'>
+    <link rel="stylesheet" href="index.css">
+    <script type="text/javascript" src="/js/socketcluster.js"></script>
+    <!-- <audio id='crash'>
+      <source src='audio/chirp.wav' type='audio/xwav'>
       This browser does not support HTML Audio.
-    </audio>
-    <style>
+    </audio> -->
 
-      html {
-        height: 100%;
-      }
-      body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        color: #666666;
-        display: table;
-        font-weight: 100;
-        font-family: 'Roboto', Helvetica, sans-serif;
-      }
-      a {
-        font-weight: 300;
-        color: #72B963;
-      }
-      .container {
-        display: table-cell;
-        text-align: center;
-        vertical-align: middle;
-      }
-      .content {
-        text-align: center;
-        display: inline-block;
-      }
-
-      .title {
-        font-size: 96px;
-        margin-bottom: 20px;
-      }
-
-      .text {
-        font-size: 24px;
-        margin-bottom: 20px;
-      }
-      .small {
-        font-size: 18px;
-      }
-
-      .button {
-        border-color: black;
-        width: 150px;
-        height: 150px;
-        border-radius: 50%;
-        background-color: #E33;
-        box-shadow: 0 9px #999;
-        color: #EEE;
-      }
-      .button:hover {background-color: #D33}
-
-      .button:active {
-        background-color: #C22;
-        box-shadow: 0 5px #666;
-        transform: translateY(4px);
-
-      }
-    </style>
   </head>
   <body>
 
@@ -78,7 +20,7 @@
         <div class="title">
           Press a Button
         </div>
-       <button class="button">Crash</button>
+       <button class="button">Chirp</button>
        <br>
        <br>
        <div id="msg">
@@ -120,7 +62,7 @@
       console.log(audioContext.baseLatency);
       // Send audio using WebAudioAPI
       var audio_xhr = new XMLHttpRequest();
-      audio_xhr.open('GET', 'audio/crash.wav', true);
+      audio_xhr.open('GET', 'audio/chirp.wav', true);
       audio_xhr.responseType = 'arraybuffer';
       audio_xhr.onload = function() {
         audioContext.decodeAudioData(audio_xhr.response, function(theBuffer){

@@ -4,6 +4,8 @@ var path = require('path');
 var request = require('request');
 var multer = require('multer');
 var fs = require('fs');
+var spawn = require('child_process').spawn;
+var Xcorr = require('abr-xcorr');
 
 var upload = multer();
 var app = express();
@@ -26,6 +28,18 @@ app.post('/controller', function(req, res){
 app.post('/ua', function(nav){
   	console.log(nav.body);
 });
+
+app.post('/xcorr', function(req, res){
+  console.log(req.body);
+});
+// app.post('/lag', function(req, res){
+// 	var proc = spawn('python3',["../../xcor.py", req.body.file1, req.body.file2]);
+// 	console.log(proc)
+// 	proc.stdout.on('data', function(data){
+// 		console.log(data.toString());
+// 	});
+
+// });
 
 port = 3000;
 app.listen(port, console.log("Starting Server at port " + port));

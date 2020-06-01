@@ -1,136 +1,26 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Latency Check</title>
-    <link href="//fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet" type="text/css">
-    <link rel="icon" type="image/png" href="/favicon.ico">
-    <link rel="stylesheet" href="index.css">
-    <script type="text/javascript" src="/js/socketcluster.js"></script>
-    <!-- <audio id='crash'>
-      <source src='audio/chirp.wav' type='audio/xwav'>
-      This browser does not support HTML Audio.
-    </audio> -->
-
-  </head>
-  <body>
-
-    <div class="container">
-      <div class="content">
-        <p id = "id_num">#</p>
-        <div class="title">
-          Press a Button
+    <head>
+        <title>Latency Check</title>
+        <link href="//fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet" type="text/css">
+        <link rel="icon" type="image/png" href="/favicon.ico">
+        <link rel="stylesheet" href="index.css">
+        <script type="text/javascript" src="/js/socketcluster.js"></script>
+    </head>
+    <body>
+        <div class="container">
+            <div class="content">
+                <p id = "id_num">#</p>
+                <div class="title">
+                    Press a Button
+                </div>
+                <button class="button">Chirp</button>
+                <br>
+                <br>
+                <div id="msg"></div>
+                <div id="e_msg"></div>
+            </div>
         </div>
-       <button class="button">Chirp</button>
-       <br>
-       <br>
-       <div id="msg">
-       </div>
-       <div id="e_msg">
-       </div>
-
-      </div>
-    </div>
-    <script type="text/javascript">
-      const num = Math.floor(Math.random()*1000000);
-      const nav = {
-        num: num,
-        codename: navigator.appCodeName,
-        name: navigator.appName,
-        version: navigator.appVersion,
-        platform: navigator.platform,
-        ua: navigator.userAgent
-      };
-      document.getElementById('id_num').innerHTML += num;
-
-      var xhr = new XMLHttpRequest();
-      xhr.open("POST", '/ua');
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.send(JSON.stringify(nav));
-
-      // Setup audio context
-      var audioContext, buffer;
-      try{
-        audioContext = new webkitAudioContext();
-      } catch{
-        audioContext = new AudioContext();
-      }
-
-      window.onerror = function (msg, url, lineNo, columnNo, error) {
-        document.getElementById('e_msg').innerHTML += msg;
-      };
-
-      console.log(audioContext.baseLatency);
-      // Send audio using WebAudioAPI
-      var audio_xhr = new XMLHttpRequest();
-      audio_xhr.open('GET', 'audio/chirp.wav', true);
-      audio_xhr.responseType = 'arraybuffer';
-      audio_xhr.onload = function() {
-        audioContext.decodeAudioData(audio_xhr.response, function(theBuffer){
-          buffer = theBuffer;
-        });
-      }
-      audio_xhr.send();
-
-      const track = audioContext.createBufferSource();
-      track.buffer = buffer;
-      track.connect(audioContext.destination);
-
-      function playSound(){
-        if (audioContext.state == 'suspended'){
-          audioContext.resume();
-        }
-        playSample(audioContext, buffer);
-        console.log(audioContext.outputLatency);
-        d = new Date();
-        // Update page with last time button was hit
-        document.getElementById('msg').innerHTML = d.toTimeString();
-      }
-      function playSample(audioContext, audioBuffer) {
-        const sampleSource = audioContext.createBufferSource();
-        sampleSource.buffer = audioBuffer;
-        sampleSource.connect(audioContext.destination)
-        sampleSource.start();
-        return sampleSource;
-      }
-
-      const playButton = document.querySelector('button');
-      playButton.addEventListener('mousedown', function() {
-        playSound()
-      }, false);
-
-      //SOCKET CLUSTER
-      const options = {
-        // secure: true,
-        // hostname: 'localhost',
-        port: 8000,
-        // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
-      };
-      const socket = socketCluster.create(options);
-
-      var recieved_play = socket.subscribe('play');
-
-      // Send time and ID number to operator
-      recieved_play.watch(function (sound){
-        console.log(sound);
-        let now = Date.now();
-        playSound();
-        socket.publish('send_time', {time: now, id: num});
-      });
-
-      // Add errors on page
-      socket.on('error', function (err) {
-        console.error(err);
-        document.getElementById('e_msg').innerHTML += err + '<br>';
-      });
-
-      socket.on('connect', function () {
-        console.log('Socket is connected');
-      });
-
-      socket.on('subscribe', function (channelName) {
-        console.log(`Socket is subscribed to ${channelName}`);
-      });
-
-    </script>
-  </body>
+    </body>
+    <script type="text/javascript" src="/js/index.js"></script>
 </html>

@@ -21,8 +21,11 @@ app.get('/operator', function(req, res){
 });
 
 app.post('/controller', function(req, res){
-  if (req.body.password == 'lagpolice') res.sendFile(path.join(__dirname + '/public/operator.html'));
-  else return res.status(401).send();
+    if (req.body.password == 'lagpolice') {
+      res.sendFile(path.join(__dirname + '/public/operator.html'));
+    } else {
+        return res.status(401).send();
+    }
 });
 
 app.post('/ua', function(nav){
@@ -32,14 +35,6 @@ app.post('/ua', function(nav){
 app.post('/xcorr', function(req, res){
   console.log(req.body);
 });
-// app.post('/lag', function(req, res){
-// 	var proc = spawn('python3',["../../xcor.py", req.body.file1, req.body.file2]);
-// 	console.log(proc)
-// 	proc.stdout.on('data', function(data){
-// 		console.log(data.toString());
-// 	});
-
-// });
 
 port = 3000;
 app.listen(port, console.log("Starting Server at port " + port));

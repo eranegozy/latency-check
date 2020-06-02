@@ -24,7 +24,8 @@ try{
 }
 
 window.onerror = function (msg, url, lineNo, columnNo, error) {
-    document.getElementById('e_msg').innerHTML += msg;
+    document.getElementById('e_msg').innerHTML += msg + "<br>";
+    document.getElementById('e_msg').innerHTML += "refresh the page <br>";
 };
 
 // Send audio using WebAudioAPI
@@ -63,7 +64,7 @@ function playSample(audioContext, audioBuffer) {
 }
 
 const playButton = document.querySelector('button');
-playButton.addEventListener('mousedown', function() {
+playButton.addEventListener('click', function() {
     playSound()
 }, false);
 
@@ -91,6 +92,8 @@ recieved_play.watch(function (sound){
 socket.on('error', function (err) {
     console.error(err);
     document.getElementById('e_msg').innerHTML += err + '<br>';
+    document.getElementById('e_msg').innerHTML += "refresh the page <br>";
+
 });
 
 socket.on('connect', function () {

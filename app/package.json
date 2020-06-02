@@ -34,6 +34,6 @@
   ],
   "readmeFilename": "README.md",
   "scripts": {
-    "start": "node server.js",
+    "start": "node server.js"
   }
 }

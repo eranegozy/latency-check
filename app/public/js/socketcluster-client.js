@@ -1,38 +1,15 @@
 /**
- * SocketCluster JavaScript client v14.3.1
+ * SocketCluster JavaScript client v16.0.1
  */
-(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.socketCluster = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(_dereq_,module,exports){
-var SCClientSocket = _dereq_('./lib/scclientsocket');
-var factory = _dereq_('./lib/factory');
-
-module.exports.factory = factory;
-module.exports.SCClientSocket = SCClientSocket;
-
-module.exports.Emitter = _dereq_('component-emitter');
-
-module.exports.create = function (options) {
-  return factory.create(options);
-};
-
-module.exports.connect = module.exports.create;
-
-module.exports.destroy = function (socket) {
-  return factory.destroy(socket);
-};
-
-module.exports.clients = factory.clients;
-
-module.exports.version = '14.3.1';
-
-},{"./lib/factory":3,"./lib/scclientsocket":5,"component-emitter":11}],2:[function(_dereq_,module,exports){
+ (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.socketClusterClient = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 (function (global){
-var AuthEngine = function () {
+function AuthEngine() {
   this._internalStorage = {};
   this.isLocalStorageEnabled = this._checkLocalStorageEnabled();
-};
+}
 
 AuthEngine.prototype._checkLocalStorageEnabled = function () {
-  var err;
+  let err;
   try {
     // Some browsers will throw an error here if localStorage is disabled.
     global.localStorage;
@@ -47,21 +24,17 @@ AuthEngine.prototype._checkLocalStorageEnabled = function () {
   return !err;
 };
 
-AuthEngine.prototype.saveToken = function (name, token, options, callback) {
+AuthEngine.prototype.saveToken = function (name, token, options) {
   if (this.isLocalStorageEnabled && global.localStorage) {
     global.localStorage.setItem(name, token);
   } else {
     this._internalStorage[name] = token;
   }
-  callback && callback(null, token);
+  return Promise.resolve(token);
 };
 
-AuthEngine.prototype.removeToken = function (name, callback) {
-  var token;
-
-  this.loadToken(name, function (err, authToken) {
-    token = authToken;
-  });
+AuthEngine.prototype.removeToken = function (name) {
+  let loadPromise = this.loadToken(name);
 
   if (this.isLocalStorageEnabled && global.localStorage) {
     global.localStorage.removeItem(name);
@@ -69,98 +42,56 @@ AuthEngine.prototype.removeToken = function (name, callback) {
     delete this._internalStorage[name];
   }
 
-  callback && callback(null, token);
+  return loadPromise;
 };
 
-AuthEngine.prototype.loadToken = function (name, callback) {
-  var token;
+AuthEngine.prototype.loadToken = function (name) {
+  let token;
 
   if (this.isLocalStorageEnabled && global.localStorage) {
     token = global.localStorage.getItem(name);
   } else {
     token = this._internalStorage[name] || null;
   }
-  callback(null, token);
+
+  return Promise.resolve(token);
 };
 
-module.exports.AuthEngine = AuthEngine;
+module.exports = AuthEngine;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],3:[function(_dereq_,module,exports){
+},{}],2:[function(require,module,exports){
 (function (global){
-var SCClientSocket = _dereq_('./scclientsocket');
-var scErrors = _dereq_('sc-errors');
-var uuid = _dereq_('uuid');
-var InvalidArgumentsError = scErrors.InvalidArgumentsError;
+const StreamDemux = require('stream-demux');
+const AsyncStreamEmitter = require('async-stream-emitter');
+const AGChannel = require('ag-channel');
+const AuthEngine = require('./auth');
+const formatter = require('sc-formatter');
+const AGTransport = require('./transport');
+const querystring = require('querystring');
+const LinkedList = require('linked-list');
+const cloneDeep = require('clone-deep');
+const Buffer = require('buffer/').Buffer;
+const wait = require('./wait');
 
-var _clients = {};
+const scErrors = require('sc-errors');
+const InvalidArgumentsError = scErrors.InvalidArgumentsError;
+const InvalidMessageError = scErrors.InvalidMessageError;
+const InvalidActionError = scErrors.InvalidActionError;
+const SocketProtocolError = scErrors.SocketProtocolError;
+const TimeoutError = scErrors.TimeoutError;
+const BadConnectionError = scErrors.BadConnectionError;
 
-function getMultiplexId(options) {
-  var protocolPrefix = options.secure ? 'https://' : 'http://';
-  var queryString = '';
-  if (options.query) {
-    if (typeof options.query === 'string') {
-      queryString = options.query;
-    } else {
-      var queryArray = [];
-      var queryMap = options.query;
-      for (var key in queryMap) {
-        if (queryMap.hasOwnProperty(key)) {
-          queryArray.push(key + '=' + queryMap[key]);
-        }
-      }
-      if (queryArray.length) {
-        queryString = '?' + queryArray.join('&');
-      }
-    }
-  }
-  var host;
-  if (options.host) {
-    host = options.host;
-  } else {
-    host = options.hostname + ':' + options.port;
-  }
-  return protocolPrefix + host + options.path + queryString;
-}
+const isBrowser = typeof window !== 'undefined';
 
-function isUrlSecure() {
-  return global.location && location.protocol === 'https:';
-}
+function AGClientSocket(socketOptions) {
+  AsyncStreamEmitter.call(this);
 
-function getPort(options, isSecureDefault) {
-  var isSecure = options.secure == null ? isSecureDefault : options.secure;
-  return options.port || (global.location && location.port ? location.port : isSecure ? 443 : 80);
-}
-
-function create(options) {
-  var self = this;
-
-  options = options || {};
-
-  if (options.host && !options.host.match(/[^:]+:\d{2,5}/)) {
-    throw new InvalidArgumentsError('The host option should include both' +
-      ' the hostname and the port number in the format "hostname:port"');
-  }
-
-  if (options.host && options.hostname) {
-    throw new InvalidArgumentsError('The host option should already include' +
-      ' the hostname and the port number in the format "hostname:port"' +
-      ' - Because of this, you should never use host and hostname options together');
-  }
-
-  if (options.host && options.port) {
-    throw new InvalidArgumentsError('The host option should already include' +
-      ' the hostname and the port number in the format "hostname:port"' +
-      ' - Because of this, you should never use host and port options together');
-  }
-
-  var isSecureDefault = isUrlSecure();
-
-  var opts = {
-    port: getPort(options, isSecureDefault),
-    hostname: global.location && location.hostname || 'localhost',
+  let defaultOptions = {
     path: '/socketcluster/',
-    secure: isSecureDefault,
+    secure: false,
+    protocolScheme: null,
+    socketPath: null,
     autoConnect: true,
     autoReconnect: true,
     autoSubscribeOnConnect: true,
@@ -168,136 +99,20 @@ function create(options) {
     ackTimeout: 10000,
     timestampRequests: false,
     timestampParam: 't',
-    authEngine: null,
-    authTokenName: 'socketCluster.authToken',
+    authTokenName: 'socketcluster.authToken',
     binaryType: 'arraybuffer',
-    multiplex: true,
-    pubSubBatchDuration: null,
+    batchOnHandshake: false,
+    batchOnHandshakeDuration: 100,
+    batchInterval: 50,
+    protocolVersion: 2,
+    wsOptions: {},
     cloneData: false
   };
-  for (var i in options) {
-    if (options.hasOwnProperty(i)) {
-      opts[i] = options[i];
-    }
-  }
-  opts.clientMap = _clients;
-
-  if (opts.multiplex === false) {
-    opts.clientId = uuid.v4();
-    var socket = new SCClientSocket(opts);
-    _clients[opts.clientId] = socket;
-    return socket;
-  }
-  opts.clientId = getMultiplexId(opts);
-
-  if (_clients[opts.clientId]) {
-    if (opts.autoConnect) {
-      _clients[opts.clientId].connect();
-    }
-  } else {
-    _clients[opts.clientId] = new SCClientSocket(opts);
-  }
-  return _clients[opts.clientId];
-}
-
-function destroy(socket) {
-  socket.destroy();
-}
-
-module.exports = {
-  create: create,
-  destroy: destroy,
-  clients: _clients
-};
-
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./scclientsocket":5,"sc-errors":20,"uuid":22}],4:[function(_dereq_,module,exports){
-var scErrors = _dereq_('sc-errors');
-var InvalidActionError = scErrors.InvalidActionError;
-
-var Response = function (socket, id) {
-  this.socket = socket;
-  this.id = id;
-  this.sent = false;
-};
-
-Response.prototype._respond = function (responseData) {
-  if (this.sent) {
-    throw new InvalidActionError('Response ' + this.id + ' has already been sent');
-  } else {
-    this.sent = true;
-    this.socket.send(this.socket.encode(responseData));
-  }
-};
-
-Response.prototype.end = function (data) {
-  if (this.id) {
-    var responseData = {
-      rid: this.id
-    };
-    if (data !== undefined) {
-      responseData.data = data;
-    }
-    this._respond(responseData);
-  }
-};
-
-Response.prototype.error = function (error, data) {
-  if (this.id) {
-    var err = scErrors.dehydrateError(error);
-
-    var responseData = {
-      rid: this.id,
-      error: err
-    };
-    if (data !== undefined) {
-      responseData.data = data;
-    }
-
-    this._respond(responseData);
-  }
-};
-
-Response.prototype.callback = function (error, data) {
-  if (error) {
-    this.error(error, data);
-  } else {
-    this.end(data);
-  }
-};
-
-module.exports.Response = Response;
-
-},{"sc-errors":20}],5:[function(_dereq_,module,exports){
-(function (global){
-var Emitter = _dereq_('component-emitter');
-var SCChannel = _dereq_('sc-channel').SCChannel;
-var Response = _dereq_('./response').Response;
-var AuthEngine = _dereq_('./auth').AuthEngine;
-var formatter = _dereq_('sc-formatter');
-var SCTransport = _dereq_('./sctransport').SCTransport;
-var querystring = _dereq_('querystring');
-var LinkedList = _dereq_('linked-list');
-var Buffer = _dereq_('buffer/').Buffer;
-var clone = _dereq_('clone');
-
-var scErrors = _dereq_('sc-errors');
-var InvalidArgumentsError = scErrors.InvalidArgumentsError;
-var InvalidMessageError = scErrors.InvalidMessageError;
-var InvalidActionError = scErrors.InvalidActionError;
-var SocketProtocolError = scErrors.SocketProtocolError;
-var TimeoutError = scErrors.TimeoutError;
-var BadConnectionError = scErrors.BadConnectionError;
-
-var isBrowser = typeof window !== 'undefined';
-
-
-var SCClientSocket = function (opts) {
-  var self = this;
-
-  Emitter.call(this);
+  let opts = Object.assign(defaultOptions, socketOptions);
 
   this.id = null;
+  this.version = opts.version || null;
+  this.protocolVersion = opts.protocolVersion;
   this.state = this.CLOSED;
   this.authState = this.UNAUTHENTICATED;
   this.signedAuthToken = null;
@@ -306,6 +121,7 @@ var SCClientSocket = function (opts) {
   this.pendingReconnectTimeout = null;
   this.preparingPendingSubscriptions = false;
   this.clientId = opts.clientId;
+  this.wsOptions = opts.wsOptions;
 
   this.connectTimeout = opts.connectTimeout;
   this.ackTimeout = opts.ackTimeout;
@@ -313,56 +129,48 @@ var SCClientSocket = function (opts) {
   this.disconnectOnUnload = opts.disconnectOnUnload == null ? true : opts.disconnectOnUnload;
   this.authTokenName = opts.authTokenName;
 
-  // pingTimeout will be ackTimeout at the start, but it will
+  // pingTimeout will be connectTimeout at the start, but it will
   // be updated with values provided by the 'connect' event
-  this.pingTimeout = this.ackTimeout;
+  opts.pingTimeout = opts.connectTimeout;
+  this.pingTimeout = opts.pingTimeout;
   this.pingTimeoutDisabled = !!opts.pingTimeoutDisabled;
-  this.active = true;
 
-  this._clientMap = opts.clientMap || {};
+  let maxTimeout = Math.pow(2, 31) - 1;
 
-  var maxTimeout = Math.pow(2, 31) - 1;
-
-  var verifyDuration = function (propertyName) {
-    if (self[propertyName] > maxTimeout) {
-      throw new InvalidArgumentsError('The ' + propertyName +
-        ' value provided exceeded the maximum amount allowed');
+  let verifyDuration = (propertyName) => {
+    if (this[propertyName] > maxTimeout) {
+      throw new InvalidArgumentsError(
+        `The ${propertyName} value provided exceeded the maximum amount allowed`
+      );
     }
   };
 
   verifyDuration('connectTimeout');
   verifyDuration('ackTimeout');
-
-  this._localEvents = {
-    'connect': 1,
-    'connectAbort': 1,
-    'close': 1,
-    'disconnect': 1,
-    'message': 1,
-    'error': 1,
-    'raw': 1,
-    'kickOut': 1,
-    'subscribe': 1,
-    'unsubscribe': 1,
-    'subscribeStateChange': 1,
-    'authStateChange': 1,
-    'authenticate': 1,
-    'deauthenticate': 1,
-    'removeAuthToken': 1,
-    'subscribeRequest': 1
-  };
+  verifyDuration('pingTimeout');
 
   this.connectAttempts = 0;
 
-  this._emitBuffer = new LinkedList();
-  this.channels = {};
+  this.isBatching = false;
+  this.batchOnHandshake = opts.batchOnHandshake;
+  this.batchOnHandshakeDuration = opts.batchOnHandshakeDuration;
+
+  this._batchingIntervalId = null;
+  this._outboundBuffer = new LinkedList();
+  this._channelMap = {};
+
+  this._channelEventDemux = new StreamDemux();
+  this._channelDataDemux = new StreamDemux();
+
+  this._receiverDemux = new StreamDemux();
+  this._procedureDemux = new StreamDemux();
 
   this.options = opts;
 
   this._cid = 1;
 
-  this.options.callIdGenerator = function () {
-    return self._cid++;
+  this.options.callIdGenerator = () => {
+    return this._cid++;
   };
 
   if (this.options.autoReconnect) {
@@ -372,7 +180,7 @@ var SCClientSocket = function (opts) {
 
     // Add properties to the this.options.autoReconnectOptions object.
     // We assign the reference to a reconnectOptions variable to avoid repetition.
-    var reconnectOptions = this.options.autoReconnectOptions;
+    let reconnectOptions = this.options.autoReconnectOptions;
     if (reconnectOptions.initialDelay == null) {
       reconnectOptions.initialDelay = 10000;
     }
@@ -405,197 +213,264 @@ var SCClientSocket = function (opts) {
   }
 
   if (this.options.protocol) {
-    var protocolOptionError = new InvalidArgumentsError('The "protocol" option' +
-      ' does not affect socketcluster-client. If you want to utilize SSL/TLS' +
-      ' - use "secure" option instead');
-    this._onSCError(protocolOptionError);
+    let protocolOptionError = new InvalidArgumentsError(
+      'The "protocol" option does not affect socketcluster-client - ' +
+      'If you want to utilize SSL/TLS, use "secure" option instead'
+    );
+    this._onError(protocolOptionError);
   }
-
-  this.options.path = this.options.path.replace(/\/$/, '') + '/';
 
   this.options.query = opts.query || {};
   if (typeof this.options.query === 'string') {
     this.options.query = querystring.parse(this.options.query);
   }
 
-  this._channelEmitter = new Emitter();
-
-  this._unloadHandler = function () {
-    self.disconnect();
-  };
-
-  if (isBrowser && this.disconnectOnUnload && global.addEventListener) {
-    global.addEventListener('beforeunload', this._unloadHandler, false);
+  if (isBrowser && this.disconnectOnUnload && global.addEventListener && global.removeEventListener) {
+    this._handleBrowserUnload();
   }
-  this._clientMap[this.clientId] = this;
 
   if (this.options.autoConnect) {
     this.connect();
   }
+}
+
+AGClientSocket.prototype = Object.create(AsyncStreamEmitter.prototype);
+
+AGClientSocket.CONNECTING = AGClientSocket.prototype.CONNECTING = AGTransport.prototype.CONNECTING;
+AGClientSocket.OPEN = AGClientSocket.prototype.OPEN = AGTransport.prototype.OPEN;
+AGClientSocket.CLOSED = AGClientSocket.prototype.CLOSED = AGTransport.prototype.CLOSED;
+
+AGClientSocket.AUTHENTICATED = AGClientSocket.prototype.AUTHENTICATED = 'authenticated';
+AGClientSocket.UNAUTHENTICATED = AGClientSocket.prototype.UNAUTHENTICATED = 'unauthenticated';
+
+AGClientSocket.SUBSCRIBED = AGClientSocket.prototype.SUBSCRIBED = AGChannel.SUBSCRIBED;
+AGClientSocket.PENDING = AGClientSocket.prototype.PENDING = AGChannel.PENDING;
+AGClientSocket.UNSUBSCRIBED = AGClientSocket.prototype.UNSUBSCRIBED = AGChannel.UNSUBSCRIBED;
+
+AGClientSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
+AGClientSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
+
+Object.defineProperty(AGClientSocket.prototype, 'isBufferingBatch', {
+  get: function () {
+    return this.transport.isBufferingBatch;
+  }
+});
+
+AGClientSocket.prototype.getBackpressure = function () {
+  return Math.max(
+    this.getAllListenersBackpressure(),
+    this.getAllReceiversBackpressure(),
+    this.getAllProceduresBackpressure(),
+    this.getAllChannelsBackpressure()
+  );
 };
 
-SCClientSocket.prototype = Object.create(Emitter.prototype);
+AGClientSocket.prototype._handleBrowserUnload = async function () {
+  let unloadHandler = () => {
+    this.disconnect();
+  };
+  let isUnloadHandlerAttached = false;
 
-SCClientSocket.CONNECTING = SCClientSocket.prototype.CONNECTING = SCTransport.prototype.CONNECTING;
-SCClientSocket.OPEN = SCClientSocket.prototype.OPEN = SCTransport.prototype.OPEN;
-SCClientSocket.CLOSED = SCClientSocket.prototype.CLOSED = SCTransport.prototype.CLOSED;
+  let attachUnloadHandler = () => {
+    if (!isUnloadHandlerAttached) {
+      isUnloadHandlerAttached = true;
+      global.addEventListener('beforeunload', unloadHandler, false);
+    }
+  };
 
-SCClientSocket.AUTHENTICATED = SCClientSocket.prototype.AUTHENTICATED = 'authenticated';
-SCClientSocket.UNAUTHENTICATED = SCClientSocket.prototype.UNAUTHENTICATED = 'unauthenticated';
+  let detachUnloadHandler = () => {
+    if (isUnloadHandlerAttached) {
+      isUnloadHandlerAttached = false;
+      global.removeEventListener('beforeunload', unloadHandler, false);
+    }
+  };
 
-SCClientSocket.PENDING = SCClientSocket.prototype.PENDING = 'pending';
+  (async () => {
+    let consumer = this.listener('connecting').createConsumer();
+    while (true) {
+      let packet = await consumer.next();
+      if (packet.done) break;
+      attachUnloadHandler();
+    }
+  })();
 
-SCClientSocket.ignoreStatuses = scErrors.socketProtocolIgnoreStatuses;
-SCClientSocket.errorStatuses = scErrors.socketProtocolErrorStatuses;
+  (async () => {
+    let consumer = this.listener('close').createConsumer();
+    while (true) {
+      let packet = await consumer.next();
+      if (packet.done) break;
+      detachUnloadHandler();
+    }
+  })();
+};
 
-SCClientSocket.prototype._privateEventHandlerMap = {
+AGClientSocket.prototype._setAuthToken = function (data) {
+  this._changeToAuthenticatedState(data.token);
+
+  (async () => {
+    try {
+      await this.auth.saveToken(this.authTokenName, data.token, {});
+    } catch (err) {
+      this._onError(err);
+    }
+  })();
+};
+
+AGClientSocket.prototype._removeAuthToken = function (data) {
+  (async () => {
+    let oldAuthToken;
+    try {
+      oldAuthToken = await this.auth.removeToken(this.authTokenName);
+    } catch (err) {
+      // Non-fatal error - Do not close the connection
+      this._onError(err);
+      return;
+    }
+    this.emit('removeAuthToken', {oldAuthToken});
+  })();
+
+  this._changeToUnauthenticatedStateAndClearTokens();
+};
+
+AGClientSocket.prototype._privateDataHandlerMap = {
   '#publish': function (data) {
-    var undecoratedChannelName = this._undecorateChannelName(data.channel);
-    var isSubscribed = this.isSubscribed(undecoratedChannelName, true);
+    let undecoratedChannelName = this._undecorateChannelName(data.channel);
+    let isSubscribed = this.isSubscribed(undecoratedChannelName, true);
 
     if (isSubscribed) {
-      this._channelEmitter.emit(undecoratedChannelName, data.data);
+      this._channelDataDemux.write(undecoratedChannelName, data.data);
     }
   },
   '#kickOut': function (data) {
-    var undecoratedChannelName = this._undecorateChannelName(data.channel);
-    var channel = this.channels[undecoratedChannelName];
+    let undecoratedChannelName = this._undecorateChannelName(data.channel);
+    let channel = this._channelMap[undecoratedChannelName];
     if (channel) {
-      Emitter.prototype.emit.call(this, 'kickOut', data.message, undecoratedChannelName);
-      channel.emit('kickOut', data.message, undecoratedChannelName);
+      this.emit('kickOut', {
+        channel: undecoratedChannelName,
+        message: data.message
+      });
+      this._channelEventDemux.write(`${undecoratedChannelName}/kickOut`, {message: data.message});
       this._triggerChannelUnsubscribe(channel);
     }
   },
-  '#setAuthToken': function (data, response) {
-    var self = this;
-
+  '#setAuthToken': function (data) {
     if (data) {
-      var triggerAuthenticate = function (err) {
-        if (err) {
-          // This is a non-fatal error, we don't want to close the connection
-          // because of this but we do want to notify the server and throw an error
-          // on the client.
-          response.error(err);
-          self._onSCError(err);
-        } else {
-          self._changeToAuthenticatedState(data.token);
-          response.end();
-        }
-      };
-
-      this.auth.saveToken(this.authTokenName, data.token, {}, triggerAuthenticate);
-    } else {
-      response.error(new InvalidMessageError('No token data provided by #setAuthToken event'));
+      this._setAuthToken(data);
     }
   },
-  '#removeAuthToken': function (data, response) {
-    var self = this;
-
-    this.auth.removeToken(this.authTokenName, function (err, oldToken) {
-      if (err) {
-        // Non-fatal error - Do not close the connection
-        response.error(err);
-        self._onSCError(err);
-      } else {
-        Emitter.prototype.emit.call(self, 'removeAuthToken', oldToken);
-        self._changeToUnauthenticatedStateAndClearTokens();
-        response.end();
-      }
-    });
-  },
-  '#disconnect': function (data) {
-    this.transport.close(data.code, data.data);
+  '#removeAuthToken': function (data) {
+    this._removeAuthToken(data);
   }
 };
 
-SCClientSocket.prototype.getState = function () {
+AGClientSocket.prototype._privateRPCHandlerMap = {
+  '#setAuthToken': function (data, request) {
+    if (data) {
+      this._setAuthToken(data);
+
+      request.end();
+    } else {
+      request.error(new InvalidMessageError('No token data provided by #setAuthToken event'));
+    }
+  },
+  '#removeAuthToken': function (data, request) {
+    this._removeAuthToken(data);
+    request.end();
+  }
+};
+
+AGClientSocket.prototype.getState = function () {
   return this.state;
 };
 
-SCClientSocket.prototype.getBytesReceived = function () {
+AGClientSocket.prototype.getBytesReceived = function () {
   return this.transport.getBytesReceived();
 };
 
-SCClientSocket.prototype.deauthenticate = function (callback) {
-  var self = this;
-
-  this.auth.removeToken(this.authTokenName, function (err, oldToken) {
-    if (err) {
-      // Non-fatal error - Do not close the connection
-      self._onSCError(err);
-    } else {
-      Emitter.prototype.emit.call(self, 'removeAuthToken', oldToken);
-      if (self.state !== self.CLOSED) {
-        self.emit('#removeAuthToken');
-      }
-      self._changeToUnauthenticatedStateAndClearTokens();
+AGClientSocket.prototype.deauthenticate = async function () {
+  (async () => {
+    let oldAuthToken;
+    try {
+      oldAuthToken = await this.auth.removeToken(this.authTokenName);
+    } catch (err) {
+      this._onError(err);
+      return;
     }
-    callback && callback(err);
-  });
+    this.emit('removeAuthToken', {oldAuthToken});
+  })();
+
+  if (this.state !== this.CLOSED) {
+    this.transmit('#removeAuthToken');
+  }
+  this._changeToUnauthenticatedStateAndClearTokens();
+  await wait(0);
 };
 
-SCClientSocket.prototype.connect = SCClientSocket.prototype.open = function () {
-  var self = this;
-
-  if (!this.active) {
-    var error = new InvalidActionError('Cannot connect a destroyed client');
-    this._onSCError(error);
-    return;
-  }
-
+AGClientSocket.prototype.connect = function () {
   if (this.state === this.CLOSED) {
     this.pendingReconnect = false;
     this.pendingReconnectTimeout = null;
     clearTimeout(this._reconnectTimeoutRef);
 
     this.state = this.CONNECTING;
-    Emitter.prototype.emit.call(this, 'connecting');
+    this.emit('connecting', {});
 
     if (this.transport) {
-      this.transport.off();
+      this.transport.clearAllListeners();
     }
 
-    this.transport = new SCTransport(this.auth, this.codec, this.options);
+    let transportHandlers = {
+      onOpen: (value) => {
+        this.state = this.OPEN;
+        this._onOpen(value);
+      },
+      onOpenAbort: (value) => {
+        if (this.state !== this.CLOSED) {
+          this.state = this.CLOSED;
+          this._destroy(value.code, value.reason, true);
+        }
+      },
+      onClose: (value) => {
+        if (this.state !== this.CLOSED) {
+          this.state = this.CLOSED;
+          this._destroy(value.code, value.reason);
+        }
+      },
+      onEvent: (value) => {
+        this.emit(value.event, value.data);
+      },
+      onError: (value) => {
+        this._onError(value.error);
+      },
+      onInboundInvoke: (value) => {
+        this._onInboundInvoke(value);
+      },
+      onInboundTransmit: (value) => {
+        this._onInboundTransmit(value.event, value.data);
+      }
+    };
 
-    this.transport.on('open', function (status) {
-      self.state = self.OPEN;
-      self._onSCOpen(status);
-    });
-
-    this.transport.on('error', function (err) {
-      self._onSCError(err);
-    });
-
-    this.transport.on('close', function (code, data) {
-      self.state = self.CLOSED;
-      self._onSCClose(code, data);
-    });
-
-    this.transport.on('openAbort', function (code, data) {
-      self.state = self.CLOSED;
-      self._onSCClose(code, data, true);
-    });
-
-    this.transport.on('event', function (event, data, res) {
-      self._onSCEvent(event, data, res);
-    });
+    this.transport = new AGTransport(this.auth, this.codec, this.options, this.wsOptions, transportHandlers);
   }
 };
 
-SCClientSocket.prototype.reconnect = function (code, data) {
-  this.disconnect(code, data);
+AGClientSocket.prototype.reconnect = function (code, reason) {
+  this.disconnect(code, reason);
   this.connect();
 };
 
-SCClientSocket.prototype.disconnect = function (code, data) {
+AGClientSocket.prototype.disconnect = function (code, reason) {
   code = code || 1000;
 
   if (typeof code !== 'number') {
     throw new InvalidArgumentsError('If specified, the code argument must be a number');
   }
 
-  if (this.state === this.OPEN || this.state === this.CONNECTING) {
-    this.transport.close(code, data);
+  let isConnecting = this.state === this.CONNECTING;
+  if (isConnecting || this.state === this.OPEN) {
+    this.state = this.CLOSED;
+    this._destroy(code, reason, isConnecting);
+    this.transport.close(code, reason);
   } else {
     this.pendingReconnect = false;
     this.pendingReconnectTimeout = null;
@@ -603,42 +478,34 @@ SCClientSocket.prototype.disconnect = function (code, data) {
   }
 };
 
-SCClientSocket.prototype.destroy = function (code, data) {
-  if (isBrowser && global.removeEventListener) {
-    global.removeEventListener('beforeunload', this._unloadHandler, false);
-  }
-  this.active = false;
-  this.disconnect(code, data);
-  delete this._clientMap[this.clientId];
-};
-
-SCClientSocket.prototype._changeToUnauthenticatedStateAndClearTokens = function () {
+AGClientSocket.prototype._changeToUnauthenticatedStateAndClearTokens = function () {
   if (this.authState !== this.UNAUTHENTICATED) {
-    var oldState = this.authState;
-    var oldSignedToken = this.signedAuthToken;
+    let oldAuthState = this.authState;
+    let oldAuthToken = this.authToken;
+    let oldSignedAuthToken = this.signedAuthToken;
     this.authState = this.UNAUTHENTICATED;
     this.signedAuthToken = null;
     this.authToken = null;
 
-    var stateChangeData = {
-      oldState: oldState,
-      newState: this.authState
+    let stateChangeData = {
+      oldAuthState,
+      newAuthState: this.authState
     };
-    Emitter.prototype.emit.call(this, 'authStateChange', stateChangeData);
-    Emitter.prototype.emit.call(this, 'deauthenticate', oldSignedToken);
+    this.emit('authStateChange', stateChangeData);
+    this.emit('deauthenticate', {oldSignedAuthToken, oldAuthToken});
   }
 };
 
-SCClientSocket.prototype._changeToAuthenticatedState = function (signedAuthToken) {
+AGClientSocket.prototype._changeToAuthenticatedState = function (signedAuthToken) {
   this.signedAuthToken = signedAuthToken;
   this.authToken = this._extractAuthTokenData(signedAuthToken);
 
   if (this.authState !== this.AUTHENTICATED) {
-    var oldState = this.authState;
+    let oldAuthState = this.authState;
     this.authState = this.AUTHENTICATED;
-    var stateChangeData = {
-      oldState: oldState,
-      newState: this.authState,
+    let stateChangeData = {
+      oldAuthState,
+      newAuthState: this.authState,
       signedAuthToken: signedAuthToken,
       authToken: this.authToken
     };
@@ -646,24 +513,24 @@ SCClientSocket.prototype._changeToAuthenticatedState = function (signedAuthToken
       this.processPendingSubscriptions();
     }
 
-    Emitter.prototype.emit.call(this, 'authStateChange', stateChangeData);
+    this.emit('authStateChange', stateChangeData);
   }
-  Emitter.prototype.emit.call(this, 'authenticate', signedAuthToken);
+  this.emit('authenticate', {signedAuthToken, authToken: this.authToken});
 };
 
-SCClientSocket.prototype.decodeBase64 = function (encodedString) {
+AGClientSocket.prototype.decodeBase64 = function (encodedString) {
   return Buffer.from(encodedString, 'base64').toString('utf8');
 };
 
-SCClientSocket.prototype.encodeBase64 = function (decodedString) {
+AGClientSocket.prototype.encodeBase64 = function (decodedString) {
   return Buffer.from(decodedString, 'utf8').toString('base64');
 };
 
-SCClientSocket.prototype._extractAuthTokenData = function (signedAuthToken) {
-  var tokenParts = (signedAuthToken || '').split('.');
-  var encodedTokenData = tokenParts[1];
+AGClientSocket.prototype._extractAuthTokenData = function (signedAuthToken) {
+  let tokenParts = (signedAuthToken || '').split('.');
+  let encodedTokenData = tokenParts[1];
   if (encodedTokenData != null) {
-    var tokenData = encodedTokenData;
+    let tokenData = encodedTokenData;
     try {
       tokenData = this.decodeBase64(tokenData);
       return JSON.parse(tokenData);
@@ -674,66 +541,70 @@ SCClientSocket.prototype._extractAuthTokenData = function (signedAuthToken) {
   return null;
 };
 
-SCClientSocket.prototype.getAuthToken = function () {
+AGClientSocket.prototype.getAuthToken = function () {
   return this.authToken;
 };
 
-SCClientSocket.prototype.getSignedAuthToken = function () {
+AGClientSocket.prototype.getSignedAuthToken = function () {
   return this.signedAuthToken;
 };
 
 // Perform client-initiated authentication by providing an encrypted token string.
-SCClientSocket.prototype.authenticate = function (signedAuthToken, callback) {
-  var self = this;
+AGClientSocket.prototype.authenticate = async function (signedAuthToken) {
+  let authStatus;
 
-  this.emit('#authenticate', signedAuthToken, function (err, authStatus) {
-    if (authStatus && authStatus.isAuthenticated != null) {
-      // If authStatus is correctly formatted (has an isAuthenticated property),
-      // then we will rehydrate the authError.
-      if (authStatus.authError) {
-        authStatus.authError = scErrors.hydrateError(authStatus.authError);
-      }
-    } else {
-      // Some errors like BadConnectionError and TimeoutError will not pass a valid
-      // authStatus object to the current function, so we need to create it ourselves.
-      authStatus = {
-        isAuthenticated: self.authState,
-        authError: null
-      };
+  try {
+    authStatus = await this.invoke('#authenticate', signedAuthToken);
+  } catch (err) {
+    if (err.name !== 'BadConnectionError' && err.name !== 'TimeoutError') {
+      // In case of a bad/closed connection or a timeout, we maintain the last
+      // known auth state since those errors don't mean that the token is invalid.
+      this._changeToUnauthenticatedStateAndClearTokens();
     }
-    if (err) {
-      if (err.name !== 'BadConnectionError' && err.name !== 'TimeoutError') {
-        // In case of a bad/closed connection or a timeout, we maintain the last
-        // known auth state since those errors don't mean that the token is invalid.
+    await wait(0);
+    throw err;
+  }
 
-        self._changeToUnauthenticatedStateAndClearTokens();
-      }
-      callback && callback(err, authStatus);
-    } else {
-      self.auth.saveToken(self.authTokenName, signedAuthToken, {}, function (err) {
-        if (err) {
-          self._onSCError(err);
-        }
-        if (authStatus.isAuthenticated) {
-          self._changeToAuthenticatedState(signedAuthToken);
-        } else {
-          self._changeToUnauthenticatedStateAndClearTokens();
-        }
-        callback && callback(err, authStatus);
-      });
+  if (authStatus && authStatus.isAuthenticated != null) {
+    // If authStatus is correctly formatted (has an isAuthenticated property),
+    // then we will rehydrate the authError.
+    if (authStatus.authError) {
+      authStatus.authError = scErrors.hydrateError(authStatus.authError);
     }
-  });
+  } else {
+    // Some errors like BadConnectionError and TimeoutError will not pass a valid
+    // authStatus object to the current function, so we need to create it ourselves.
+    authStatus = {
+      isAuthenticated: this.authState,
+      authError: null
+    };
+  }
+
+  if (authStatus.isAuthenticated) {
+    this._changeToAuthenticatedState(signedAuthToken);
+  } else {
+    this._changeToUnauthenticatedStateAndClearTokens();
+  }
+
+  (async () => {
+    try {
+      await this.auth.saveToken(this.authTokenName, signedAuthToken, {});
+    } catch (err) {
+      this._onError(err);
+    }
+  })();
+
+  await wait(0);
+  return authStatus;
 };
 
-SCClientSocket.prototype._tryReconnect = function (initialDelay) {
-  var self = this;
-
-  var exponent = this.connectAttempts++;
-  var reconnectOptions = this.options.autoReconnectOptions;
-  var timeout;
+AGClientSocket.prototype._tryReconnect = function (initialDelay) {
+  let exponent = this.connectAttempts++;
+  let reconnectOptions = this.options.autoReconnectOptions;
+  let timeout;
 
   if (initialDelay == null || exponent > 0) {
-    var initialTimeout = Math.round(reconnectOptions.initialDelay + (reconnectOptions.randomness || 0) * Math.random());
+    let initialTimeout = Math.round(reconnectOptions.initialDelay + (reconnectOptions.randomness || 0) * Math.random());
 
     timeout = Math.round(initialTimeout * Math.pow(reconnectOptions.multiplier, exponent));
   } else {
@@ -748,27 +619,34 @@ SCClientSocket.prototype._tryReconnect = function (initialDelay) {
 
   this.pendingReconnect = true;
   this.pendingReconnectTimeout = timeout;
-  this._reconnectTimeoutRef = setTimeout(function () {
-    self.connect();
+  this._reconnectTimeoutRef = setTimeout(() => {
+    this.connect();
   }, timeout);
 };
 
-SCClientSocket.prototype._onSCOpen = function (status) {
-  var self = this;
-
+AGClientSocket.prototype._onOpen = function (status) {
+  if (this.isBatching) {
+    this._startBatching();
+  } else if (this.batchOnHandshake) {
+    this._startBatching();
+    setTimeout(() => {
+      if (!this.isBatching) {
+        this._stopBatching();
+      }
+    }, this.batchOnHandshakeDuration);
+  }
   this.preparingPendingSubscriptions = true;
 
   if (status) {
     this.id = status.id;
     this.pingTimeout = status.pingTimeout;
-    this.transport.pingTimeout = this.pingTimeout;
     if (status.isAuthenticated) {
       this._changeToAuthenticatedState(status.authToken);
     } else {
       this._changeToUnauthenticatedStateAndClearTokens();
     }
   } else {
-    // This can happen if auth.loadToken (in sctransport.js) fails with
+    // This can happen if auth.loadToken (in transport.js) fails with
     // an error - This means that the signedAuthToken cannot be loaded by
     // the auth engine and therefore, we need to unauthenticate the client.
     this._changeToUnauthenticatedStateAndClearTokens();
@@ -782,65 +660,48 @@ SCClientSocket.prototype._onSCOpen = function (status) {
 
   // If the user invokes the callback while in autoSubscribeOnConnect mode, it
   // won't break anything.
-  Emitter.prototype.emit.call(this, 'connect', status, function () {
-    self.processPendingSubscriptions();
+  this.emit('connect', {
+    ...status,
+    processPendingSubscriptions: () => {
+      this.processPendingSubscriptions();
+    }
   });
 
   if (this.state === this.OPEN) {
-    this._flushEmitBuffer();
+    this._flushOutboundBuffer();
   }
 };
 
-SCClientSocket.prototype._onSCError = function (err) {
-  var self = this;
-
-  // Throw error in different stack frame so that error handling
-  // cannot interfere with a reconnect action.
-  setTimeout(function () {
-    if (self.listeners('error').length < 1) {
-      throw err;
-    } else {
-      Emitter.prototype.emit.call(self, 'error', err);
-    }
-  }, 0);
+AGClientSocket.prototype._onError = function (error) {
+  this.emit('error', {error});
 };
 
-SCClientSocket.prototype._suspendSubscriptions = function () {
-  var channel, newState;
-  for (var channelName in this.channels) {
-    if (this.channels.hasOwnProperty(channelName)) {
-      channel = this.channels[channelName];
-      if (channel.state === channel.SUBSCRIBED ||
-        channel.state === channel.PENDING) {
-
-        newState = channel.PENDING;
-      } else {
-        newState = channel.UNSUBSCRIBED;
-      }
-
-      this._triggerChannelUnsubscribe(channel, newState);
-    }
-  }
+AGClientSocket.prototype._suspendSubscriptions = function () {
+  Object.keys(this._channelMap).forEach((channelName) => {
+    let channel = this._channelMap[channelName];
+    this._triggerChannelUnsubscribe(channel, true);
+  });
 };
 
-SCClientSocket.prototype._abortAllPendingEventsDueToBadConnection = function (failureType) {
-  var currentNode = this._emitBuffer.head;
-  var nextNode;
+AGClientSocket.prototype._abortAllPendingEventsDueToBadConnection = function (failureType) {
+  let currentNode = this._outboundBuffer.head;
+  let nextNode;
 
   while (currentNode) {
     nextNode = currentNode.next;
-    var eventObject = currentNode.data;
+    let eventObject = currentNode.data;
     clearTimeout(eventObject.timeout);
     delete eventObject.timeout;
     currentNode.detach();
     currentNode = nextNode;
 
-    var callback = eventObject.callback;
+    let callback = eventObject.callback;
+
     if (callback) {
       delete eventObject.callback;
-      var errorMessage = "Event '" + eventObject.event +
-        "' was aborted due to a bad connection";
-      var error = new BadConnectionError(errorMessage, failureType);
+      let errorMessage = `Event "${eventObject.event}" was aborted due to a bad connection`;
+      let error = new BadConnectionError(errorMessage, failureType);
+
       callback.call(eventObject, error, eventObject);
     }
     // Cleanup any pending response callback in the transport layer too.
@@ -850,19 +711,38 @@ SCClientSocket.prototype._abortAllPendingEventsDueToBadConnection = function (fa
   }
 };
 
-SCClientSocket.prototype._onSCClose = function (code, data, openAbort) {
-  var self = this;
-
+AGClientSocket.prototype._destroy = function (code, reason, openAbort) {
   this.id = null;
+  this._cancelBatching();
 
   if (this.transport) {
-    this.transport.off();
+    this.transport.clearAllListeners();
   }
+
   this.pendingReconnect = false;
   this.pendingReconnectTimeout = null;
   clearTimeout(this._reconnectTimeoutRef);
 
   this._suspendSubscriptions();
+
+  if (openAbort) {
+    this.emit('connectAbort', {code, reason});
+  } else {
+    this.emit('disconnect', {code, reason});
+  }
+  this.emit('close', {code, reason});
+
+  if (!AGClientSocket.ignoreStatuses[code]) {
+    let closeMessage;
+    if (reason) {
+      closeMessage = 'Socket connection closed with status code ' + code + ' and reason: ' + reason;
+    } else {
+      closeMessage = 'Socket connection closed with status code ' + code;
+    }
+    let err = new SocketProtocolError(AGClientSocket.errorStatuses[code] || closeMessage, code);
+    this._onError(err);
+  }
+
   this._abortAllPendingEventsDueToBadConnection(openAbort ? 'connectAbort' : 'disconnect');
 
   // Try to reconnect
@@ -886,68 +766,58 @@ SCClientSocket.prototype._onSCClose = function (code, data, openAbort) {
       this._tryReconnect();
     }
   }
-
-  if (openAbort) {
-    Emitter.prototype.emit.call(self, 'connectAbort', code, data);
-  } else {
-    Emitter.prototype.emit.call(self, 'disconnect', code, data);
-  }
-  Emitter.prototype.emit.call(self, 'close', code, data);
-
-  if (!SCClientSocket.ignoreStatuses[code]) {
-    var closeMessage;
-    if (data) {
-      closeMessage = 'Socket connection closed with status code ' + code + ' and reason: ' + data;
-    } else {
-      closeMessage = 'Socket connection closed with status code ' + code;
-    }
-    var err = new SocketProtocolError(SCClientSocket.errorStatuses[code] || closeMessage, code);
-    this._onSCError(err);
-  }
 };
 
-SCClientSocket.prototype._onSCEvent = function (event, data, res) {
-  var handler = this._privateEventHandlerMap[event];
+AGClientSocket.prototype._onInboundTransmit = function (event, data) {
+  let handler = this._privateDataHandlerMap[event];
   if (handler) {
-    handler.call(this, data, res);
+    handler.call(this, data);
   } else {
-    Emitter.prototype.emit.call(this, event, data, function () {
-      res && res.callback.apply(res, arguments);
-    });
+    this._receiverDemux.write(event, data);
   }
 };
 
-SCClientSocket.prototype.decode = function (message) {
+AGClientSocket.prototype._onInboundInvoke = function (request) {
+  let {procedure, data} = request;
+  let handler = this._privateRPCHandlerMap[procedure];
+  if (handler) {
+    handler.call(this, data, request);
+  } else {
+    this._procedureDemux.write(procedure, request);
+  }
+};
+
+AGClientSocket.prototype.decode = function (message) {
   return this.transport.decode(message);
 };
 
-SCClientSocket.prototype.encode = function (object) {
+AGClientSocket.prototype.encode = function (object) {
   return this.transport.encode(object);
 };
 
-SCClientSocket.prototype._flushEmitBuffer = function () {
-  var currentNode = this._emitBuffer.head;
-  var nextNode;
+AGClientSocket.prototype._flushOutboundBuffer = function () {
+  let currentNode = this._outboundBuffer.head;
+  let nextNode;
 
   while (currentNode) {
     nextNode = currentNode.next;
-    var eventObject = currentNode.data;
+    let eventObject = currentNode.data;
     currentNode.detach();
-    this.transport.emitObject(eventObject);
+    this.transport.transmitObject(eventObject);
     currentNode = nextNode;
   }
 };
 
-SCClientSocket.prototype._handleEventAckTimeout = function (eventObject, eventNode) {
+AGClientSocket.prototype._handleEventAckTimeout = function (eventObject, eventNode) {
   if (eventNode) {
     eventNode.detach();
   }
   delete eventObject.timeout;
 
-  var callback = eventObject.callback;
+  let callback = eventObject.callback;
   if (callback) {
     delete eventObject.callback;
-    var error = new TimeoutError("Event response for '" + eventObject.event + "' timed out");
+    let error = new TimeoutError(`Event response for "${eventObject.event}" timed out`);
     callback.call(eventObject, error, eventObject);
   }
   // Cleanup any pending response callback in the transport layer too.
@@ -956,208 +826,326 @@ SCClientSocket.prototype._handleEventAckTimeout = function (eventObject, eventNo
   }
 };
 
-SCClientSocket.prototype._emit = function (event, data, callback) {
-  var self = this;
+AGClientSocket.prototype._processOutboundEvent = function (event, data, options, expectResponse) {
+  options = options || {};
 
   if (this.state === this.CLOSED) {
     this.connect();
   }
-  var eventObject = {
-    event: event,
-    callback: callback
+  let eventObject = {
+    event
   };
 
-  var eventNode = new LinkedList.Item();
+  let promise;
+
+  if (expectResponse) {
+    promise = new Promise((resolve, reject) => {
+      eventObject.callback = (err, data) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(data);
+      };
+    });
+  } else {
+    promise = Promise.resolve();
+  }
+
+  let eventNode = new LinkedList.Item();
 
   if (this.options.cloneData) {
-    eventObject.data = clone(data);
+    eventObject.data = cloneDeep(data);
   } else {
     eventObject.data = data;
   }
   eventNode.data = eventObject;
 
-  eventObject.timeout = setTimeout(function () {
-    self._handleEventAckTimeout(eventObject, eventNode);
-  }, this.ackTimeout);
+  let ackTimeout = options.ackTimeout == null ? this.ackTimeout : options.ackTimeout;
 
-  this._emitBuffer.append(eventNode);
+  eventObject.timeout = setTimeout(() => {
+    this._handleEventAckTimeout(eventObject, eventNode);
+  }, ackTimeout);
+
+  this._outboundBuffer.append(eventNode);
   if (this.state === this.OPEN) {
-    this._flushEmitBuffer();
+    this._flushOutboundBuffer();
   }
+  return promise;
 };
 
-SCClientSocket.prototype.send = function (data) {
+AGClientSocket.prototype.send = function (data) {
   this.transport.send(data);
 };
 
-SCClientSocket.prototype.emit = function (event, data, callback) {
-  if (this._localEvents[event] == null) {
-    this._emit(event, data, callback);
-  } else if (event === 'error') {
-    Emitter.prototype.emit.call(this, event, data);
-  } else {
-    var error = new InvalidActionError('The "' + event + '" event is reserved and cannot be emitted on a client socket');
-    this._onSCError(error);
-  }
+AGClientSocket.prototype.transmit = function (event, data, options) {
+  return this._processOutboundEvent(event, data, options);
 };
 
-SCClientSocket.prototype.publish = function (channelName, data, callback) {
-  var pubData = {
+AGClientSocket.prototype.invoke = function (event, data, options) {
+  return this._processOutboundEvent(event, data, options, true);
+};
+
+AGClientSocket.prototype.transmitPublish = function (channelName, data) {
+  let pubData = {
     channel: this._decorateChannelName(channelName),
-    data: data
+    data
   };
-  this.emit('#publish', pubData, callback);
+  return this.transmit('#publish', pubData);
 };
 
-SCClientSocket.prototype._triggerChannelSubscribe = function (channel, subscriptionOptions) {
-  var channelName = channel.name;
+AGClientSocket.prototype.invokePublish = function (channelName, data) {
+  let pubData = {
+    channel: this._decorateChannelName(channelName),
+    data
+  };
+  return this.invoke('#publish', pubData);
+};
 
-  if (channel.state !== channel.SUBSCRIBED) {
-    var oldState = channel.state;
-    channel.state = channel.SUBSCRIBED;
+AGClientSocket.prototype._triggerChannelSubscribe = function (channel, subscriptionOptions) {
+  let channelName = channel.name;
 
-    var stateChangeData = {
-      channel: channelName,
-      oldState: oldState,
-      newState: channel.state,
-      subscriptionOptions: subscriptionOptions
+  if (channel.state !== AGChannel.SUBSCRIBED) {
+    let oldChannelState = channel.state;
+    channel.state = AGChannel.SUBSCRIBED;
+
+    let stateChangeData = {
+      oldChannelState,
+      newChannelState: channel.state,
+      subscriptionOptions
     };
-    channel.emit('subscribeStateChange', stateChangeData);
-    channel.emit('subscribe', channelName, subscriptionOptions);
-    Emitter.prototype.emit.call(this, 'subscribeStateChange', stateChangeData);
-    Emitter.prototype.emit.call(this, 'subscribe', channelName, subscriptionOptions);
+    this._channelEventDemux.write(`${channelName}/subscribeStateChange`, stateChangeData);
+    this._channelEventDemux.write(`${channelName}/subscribe`, {
+      subscriptionOptions
+    });
+    this.emit('subscribeStateChange', {
+      channel: channelName,
+      ...stateChangeData
+    });
+    this.emit('subscribe', {
+      channel: channelName,
+      subscriptionOptions
+    });
   }
 };
 
-SCClientSocket.prototype._triggerChannelSubscribeFail = function (err, channel, subscriptionOptions) {
-  var channelName = channel.name;
-  var meetsAuthRequirements = !channel.waitForAuth || this.authState === this.AUTHENTICATED;
+AGClientSocket.prototype._triggerChannelSubscribeFail = function (err, channel, subscriptionOptions) {
+  let channelName = channel.name;
+  let meetsAuthRequirements = !channel.options.waitForAuth || this.authState === this.AUTHENTICATED;
+  let hasChannel = !!this._channelMap[channelName];
 
-  if (channel.state !== channel.UNSUBSCRIBED && meetsAuthRequirements) {
-    channel.state = channel.UNSUBSCRIBED;
+  if (hasChannel && meetsAuthRequirements) {
+    delete this._channelMap[channelName];
 
-    channel.emit('subscribeFail', err, channelName, subscriptionOptions);
-    Emitter.prototype.emit.call(this, 'subscribeFail', err, channelName, subscriptionOptions);
+    this._channelEventDemux.write(`${channelName}/subscribeFail`, {
+      error: err,
+      subscriptionOptions
+    });
+    this.emit('subscribeFail', {
+      error: err,
+      channel: channelName,
+      subscriptionOptions: subscriptionOptions
+    });
   }
 };
 
 // Cancel any pending subscribe callback
-SCClientSocket.prototype._cancelPendingSubscribeCallback = function (channel) {
+AGClientSocket.prototype._cancelPendingSubscribeCallback = function (channel) {
   if (channel._pendingSubscriptionCid != null) {
     this.transport.cancelPendingResponse(channel._pendingSubscriptionCid);
     delete channel._pendingSubscriptionCid;
   }
 };
 
-SCClientSocket.prototype._decorateChannelName = function (channelName) {
+AGClientSocket.prototype._decorateChannelName = function (channelName) {
   if (this.channelPrefix) {
     channelName = this.channelPrefix + channelName;
   }
   return channelName;
 };
 
-SCClientSocket.prototype._undecorateChannelName = function (decoratedChannelName) {
+AGClientSocket.prototype._undecorateChannelName = function (decoratedChannelName) {
   if (this.channelPrefix && decoratedChannelName.indexOf(this.channelPrefix) === 0) {
     return decoratedChannelName.replace(this.channelPrefix, '');
   }
   return decoratedChannelName;
 };
 
-SCClientSocket.prototype._trySubscribe = function (channel) {
-  var self = this;
+AGClientSocket.prototype.startBatch = function () {
+  this.transport.startBatch();
+};
 
-  var meetsAuthRequirements = !channel.waitForAuth || this.authState === this.AUTHENTICATED;
+AGClientSocket.prototype.flushBatch = function () {
+  this.transport.flushBatch();
+};
+
+AGClientSocket.prototype.cancelBatch = function () {
+  this.transport.cancelBatch();
+};
+
+AGClientSocket.prototype._startBatching = function () {
+  if (this._batchingIntervalId != null) {
+    return;
+  }
+  this.startBatch();
+  this._batchingIntervalId = setInterval(() => {
+    this.flushBatch();
+    this.startBatch();
+  }, this.options.batchInterval);
+};
+
+AGClientSocket.prototype.startBatching = function () {
+  this.isBatching = true;
+  this._startBatching();
+};
+
+AGClientSocket.prototype._stopBatching = function () {
+  if (this._batchingIntervalId != null) {
+    clearInterval(this._batchingIntervalId);
+  }
+  this._batchingIntervalId = null;
+  this.flushBatch();
+};
+
+AGClientSocket.prototype.stopBatching = function () {
+  this.isBatching = false;
+  this._stopBatching();
+};
+
+AGClientSocket.prototype._cancelBatching = function () {
+  if (this._batchingIntervalId != null) {
+    clearInterval(this._batchingIntervalId);
+  }
+  this._batchingIntervalId = null;
+  this.cancelBatch();
+};
+
+AGClientSocket.prototype.cancelBatching = function () {
+  this.isBatching = false;
+  this._cancelBatching();
+};
+
+AGClientSocket.prototype._trySubscribe = function (channel) {
+  let meetsAuthRequirements = !channel.options.waitForAuth || this.authState === this.AUTHENTICATED;
 
   // We can only ever have one pending subscribe action at any given time on a channel
-  if (this.state === this.OPEN && !this.preparingPendingSubscriptions &&
-    channel._pendingSubscriptionCid == null && meetsAuthRequirements) {
+  if (
+    this.state === this.OPEN &&
+    !this.preparingPendingSubscriptions &&
+    channel._pendingSubscriptionCid == null &&
+    meetsAuthRequirements
+  ) {
 
-    var options = {
+    let options = {
       noTimeout: true
     };
 
-    var subscriptionOptions = {
-      channel: this._decorateChannelName(channel.name)
-    };
-    if (channel.waitForAuth) {
+    let subscriptionOptions = {};
+    if (channel.options.waitForAuth) {
       options.waitForAuth = true;
       subscriptionOptions.waitForAuth = options.waitForAuth;
     }
-    if (channel.data) {
-      subscriptionOptions.data = channel.data;
-    }
-    if (channel.batch) {
-      options.batch = true;
-      subscriptionOptions.batch = true;
+    if (channel.options.data) {
+      subscriptionOptions.data = channel.options.data;
     }
 
-    channel._pendingSubscriptionCid = this.transport.emit(
-      '#subscribe', subscriptionOptions, options,
-      function (err) {
-        delete channel._pendingSubscriptionCid;
+    channel._pendingSubscriptionCid = this.transport.invokeRaw(
+      '#subscribe',
+      {
+        channel: this._decorateChannelName(channel.name),
+        ...subscriptionOptions
+      },
+      options,
+      (err) => {
         if (err) {
-          self._triggerChannelSubscribeFail(err, channel, subscriptionOptions);
+          if (err.name === 'BadConnectionError') {
+            // In case of a failed connection, keep the subscription
+            // as pending; it will try again on reconnect.
+            return;
+          }
+          delete channel._pendingSubscriptionCid;
+          this._triggerChannelSubscribeFail(err, channel, subscriptionOptions);
         } else {
-          self._triggerChannelSubscribe(channel, subscriptionOptions);
+          delete channel._pendingSubscriptionCid;
+          this._triggerChannelSubscribe(channel, subscriptionOptions);
         }
       }
     );
-    Emitter.prototype.emit.call(this, 'subscribeRequest', channel.name, subscriptionOptions);
+    this.emit('subscribeRequest', {
+      channel: channel.name,
+      subscriptionOptions
+    });
   }
 };
 
-SCClientSocket.prototype.subscribe = function (channelName, options) {
-  var channel = this.channels[channelName];
+AGClientSocket.prototype.subscribe = function (channelName, options) {
+  options = options || {};
+  let channel = this._channelMap[channelName];
+
+  let sanitizedOptions = {
+    waitForAuth: !!options.waitForAuth
+  };
+
+  if (options.priority != null) {
+    sanitizedOptions.priority = options.priority;
+  }
+  if (options.data !== undefined) {
+    sanitizedOptions.data = options.data;
+  }
 
   if (!channel) {
-    channel = new SCChannel(channelName, this, options);
-    this.channels[channelName] = channel;
-  } else if (options) {
-    channel.setOptions(options);
-  }
-
-  if (channel.state === channel.UNSUBSCRIBED) {
-    channel.state = channel.PENDING;
+    channel = {
+      name: channelName,
+      state: AGChannel.PENDING,
+      options: sanitizedOptions
+    };
+    this._channelMap[channelName] = channel;
     this._trySubscribe(channel);
+  } else if (options) {
+    channel.options = sanitizedOptions;
   }
 
-  return channel;
+  let channelIterable = new AGChannel(
+    channelName,
+    this,
+    this._channelEventDemux,
+    this._channelDataDemux
+  );
+
+  return channelIterable;
 };
 
-SCClientSocket.prototype._triggerChannelUnsubscribe = function (channel, newState) {
-  var channelName = channel.name;
-  var oldState = channel.state;
+AGClientSocket.prototype._triggerChannelUnsubscribe = function (channel, setAsPending) {
+  let channelName = channel.name;
 
-  if (newState) {
-    channel.state = newState;
-  } else {
-    channel.state = channel.UNSUBSCRIBED;
-  }
   this._cancelPendingSubscribeCallback(channel);
 
-  if (oldState === channel.SUBSCRIBED) {
-    var stateChangeData = {
-      channel: channelName,
-      oldState: oldState,
-      newState: channel.state
+  if (channel.state === AGChannel.SUBSCRIBED) {
+    let stateChangeData = {
+      oldChannelState: channel.state,
+      newChannelState: setAsPending ? AGChannel.PENDING : AGChannel.UNSUBSCRIBED
     };
-    channel.emit('subscribeStateChange', stateChangeData);
-    channel.emit('unsubscribe', channelName);
-    Emitter.prototype.emit.call(this, 'subscribeStateChange', stateChangeData);
-    Emitter.prototype.emit.call(this, 'unsubscribe', channelName);
+    this._channelEventDemux.write(`${channelName}/subscribeStateChange`, stateChangeData);
+    this._channelEventDemux.write(`${channelName}/unsubscribe`, {});
+    this.emit('subscribeStateChange', {
+      channel: channelName,
+      ...stateChangeData
+    });
+    this.emit('unsubscribe', {channel: channelName});
+  }
+
+  if (setAsPending) {
+    channel.state = AGChannel.PENDING;
+  } else {
+    delete this._channelMap[channelName];
   }
 };
 
-SCClientSocket.prototype._tryUnsubscribe = function (channel) {
-  var self = this;
-
+AGClientSocket.prototype._tryUnsubscribe = function (channel) {
   if (this.state === this.OPEN) {
-    var options = {
+    let options = {
       noTimeout: true
     };
-    if (channel.batch) {
-      options.batch = true;
-    }
     // If there is a pending subscribe action, cancel the callback
     this._cancelPendingSubscribeCallback(channel);
 
@@ -1165,92 +1153,391 @@ SCClientSocket.prototype._tryUnsubscribe = function (channel) {
     // so long as the connection remains open. If the connection closes,
     // the server will automatically unsubscribe the client and thus complete
     // the operation on the server side.
-    var decoratedChannelName = this._decorateChannelName(channel.name);
-    this.transport.emit('#unsubscribe', decoratedChannelName, options);
+    let decoratedChannelName = this._decorateChannelName(channel.name);
+    this.transport.transmit('#unsubscribe', decoratedChannelName, options);
   }
 };
 
-SCClientSocket.prototype.unsubscribe = function (channelName) {
-  var channel = this.channels[channelName];
+AGClientSocket.prototype.unsubscribe = function (channelName) {
+  let channel = this._channelMap[channelName];
 
   if (channel) {
-    if (channel.state !== channel.UNSUBSCRIBED) {
-      this._triggerChannelUnsubscribe(channel);
-      this._tryUnsubscribe(channel);
-    }
+    this._triggerChannelUnsubscribe(channel);
+    this._tryUnsubscribe(channel);
   }
 };
 
-SCClientSocket.prototype.channel = function (channelName, options) {
-  var currentChannel = this.channels[channelName];
+// ---- Receiver logic ----
 
-  if (!currentChannel) {
-    currentChannel = new SCChannel(channelName, this, options);
-    this.channels[channelName] = currentChannel;
-  }
-  return currentChannel;
+AGClientSocket.prototype.receiver = function (receiverName) {
+  return this._receiverDemux.stream(receiverName);
 };
 
-SCClientSocket.prototype.destroyChannel = function (channelName) {
-  var channel = this.channels[channelName];
+AGClientSocket.prototype.closeReceiver = function (receiverName) {
+  this._receiverDemux.close(receiverName);
+};
 
+AGClientSocket.prototype.closeAllReceivers = function () {
+  this._receiverDemux.closeAll();
+};
+
+AGClientSocket.prototype.killReceiver = function (receiverName) {
+  this._receiverDemux.kill(receiverName);
+};
+
+AGClientSocket.prototype.killAllReceivers = function () {
+  this._receiverDemux.killAll();
+};
+
+AGClientSocket.prototype.killReceiverConsumer = function (consumerId) {
+  this._receiverDemux.killConsumer(consumerId);
+};
+
+AGClientSocket.prototype.getReceiverConsumerStats = function (consumerId) {
+  return this._receiverDemux.getConsumerStats(consumerId);
+};
+
+AGClientSocket.prototype.getReceiverConsumerStatsList = function (receiverName) {
+  return this._receiverDemux.getConsumerStatsList(receiverName);
+};
+
+AGClientSocket.prototype.getAllReceiversConsumerStatsList = function () {
+  return this._receiverDemux.getConsumerStatsListAll();
+};
+
+AGClientSocket.prototype.getReceiverBackpressure = function (receiverName) {
+  return this._receiverDemux.getBackpressure(receiverName);
+};
+
+AGClientSocket.prototype.getAllReceiversBackpressure = function () {
+  return this._receiverDemux.getBackpressureAll();
+};
+
+AGClientSocket.prototype.getReceiverConsumerBackpressure = function (consumerId) {
+  return this._receiverDemux.getConsumerBackpressure(consumerId);
+};
+
+AGClientSocket.prototype.hasReceiverConsumer = function (receiverName, consumerId) {
+  return this._receiverDemux.hasConsumer(receiverName, consumerId);
+};
+
+AGClientSocket.prototype.hasAnyReceiverConsumer = function (consumerId) {
+  return this._receiverDemux.hasConsumerAll(consumerId);
+};
+
+// ---- Procedure logic ----
+
+AGClientSocket.prototype.procedure = function (procedureName) {
+  return this._procedureDemux.stream(procedureName);
+};
+
+AGClientSocket.prototype.closeProcedure = function (procedureName) {
+  this._procedureDemux.close(procedureName);
+};
+
+AGClientSocket.prototype.closeAllProcedures = function () {
+  this._procedureDemux.closeAll();
+};
+
+AGClientSocket.prototype.killProcedure = function (procedureName) {
+  this._procedureDemux.kill(procedureName);
+};
+
+AGClientSocket.prototype.killAllProcedures = function () {
+  this._procedureDemux.killAll();
+};
+
+AGClientSocket.prototype.killProcedureConsumer = function (consumerId) {
+  this._procedureDemux.killConsumer(consumerId);
+};
+
+AGClientSocket.prototype.getProcedureConsumerStats = function (consumerId) {
+  return this._procedureDemux.getConsumerStats(consumerId);
+};
+
+AGClientSocket.prototype.getProcedureConsumerStatsList = function (procedureName) {
+  return this._procedureDemux.getConsumerStatsList(procedureName);
+};
+
+AGClientSocket.prototype.getAllProceduresConsumerStatsList = function () {
+  return this._procedureDemux.getConsumerStatsListAll();
+};
+
+AGClientSocket.prototype.getProcedureBackpressure = function (procedureName) {
+  return this._procedureDemux.getBackpressure(procedureName);
+};
+
+AGClientSocket.prototype.getAllProceduresBackpressure = function () {
+  return this._procedureDemux.getBackpressureAll();
+};
+
+AGClientSocket.prototype.getProcedureConsumerBackpressure = function (consumerId) {
+  return this._procedureDemux.getConsumerBackpressure(consumerId);
+};
+
+AGClientSocket.prototype.hasProcedureConsumer = function (procedureName, consumerId) {
+  return this._procedureDemux.hasConsumer(procedureName, consumerId);
+};
+
+AGClientSocket.prototype.hasAnyProcedureConsumer = function (consumerId) {
+  return this._procedureDemux.hasConsumerAll(consumerId);
+};
+
+// ---- Channel logic ----
+
+AGClientSocket.prototype.channel = function (channelName) {
+  let currentChannel = this._channelMap[channelName];
+
+  let channelIterable = new AGChannel(
+    channelName,
+    this,
+    this._channelEventDemux,
+    this._channelDataDemux
+  );
+
+  return channelIterable;
+};
+
+AGClientSocket.prototype.closeChannel = function (channelName) {
+  this.channelCloseOutput(channelName);
+  this.channelCloseAllListeners(channelName);
+};
+
+AGClientSocket.prototype.closeAllChannelOutputs = function () {
+  this._channelDataDemux.closeAll();
+};
+
+AGClientSocket.prototype.closeAllChannelListeners = function () {
+  this._channelEventDemux.closeAll();
+};
+
+AGClientSocket.prototype.closeAllChannels = function () {
+  this.closeAllChannelOutputs();
+  this.closeAllChannelListeners();
+};
+
+AGClientSocket.prototype.killChannel = function (channelName) {
+  this.channelKillOutput(channelName);
+  this.channelKillAllListeners(channelName);
+};
+
+AGClientSocket.prototype.killAllChannelOutputs = function () {
+  this._channelDataDemux.killAll();
+};
+
+AGClientSocket.prototype.killAllChannelListeners = function () {
+  this._channelEventDemux.killAll();
+};
+
+AGClientSocket.prototype.killAllChannels = function () {
+  this.killAllChannelOutputs();
+  this.killAllChannelListeners();
+};
+
+AGClientSocket.prototype.killChannelOutputConsumer = function (consumerId) {
+  this._channelDataDemux.killConsumer(consumerId);
+};
+
+AGClientSocket.prototype.killChannelListenerConsumer = function (consumerId) {
+  this._channelEventDemux.killConsumer(consumerId);
+};
+
+AGClientSocket.prototype.getChannelOutputConsumerStats = function (consumerId) {
+  return this._channelDataDemux.getConsumerStats(consumerId);
+};
+
+AGClientSocket.prototype.getChannelListenerConsumerStats = function (consumerId) {
+  return this._channelEventDemux.getConsumerStats(consumerId);
+};
+
+AGClientSocket.prototype.getAllChannelOutputsConsumerStatsList = function () {
+  return this._channelDataDemux.getConsumerStatsListAll();
+};
+
+AGClientSocket.prototype.getAllChannelListenersConsumerStatsList = function () {
+  return this._channelEventDemux.getConsumerStatsListAll();
+};
+
+AGClientSocket.prototype.getChannelBackpressure = function (channelName) {
+  return Math.max(
+    this.channelGetOutputBackpressure(channelName),
+    this.channelGetAllListenersBackpressure(channelName)
+  );
+};
+
+AGClientSocket.prototype.getAllChannelOutputsBackpressure = function () {
+  return this._channelDataDemux.getBackpressureAll();
+};
+
+AGClientSocket.prototype.getAllChannelListenersBackpressure = function () {
+  return this._channelEventDemux.getBackpressureAll();
+};
+
+AGClientSocket.prototype.getAllChannelsBackpressure = function () {
+  return Math.max(
+    this.getAllChannelOutputsBackpressure(),
+    this.getAllChannelListenersBackpressure()
+  );
+};
+
+AGClientSocket.prototype.getChannelListenerConsumerBackpressure = function (consumerId) {
+  return this._channelEventDemux.getConsumerBackpressure(consumerId);
+};
+
+AGClientSocket.prototype.getChannelOutputConsumerBackpressure = function (consumerId) {
+  return this._channelDataDemux.getConsumerBackpressure(consumerId);
+};
+
+AGClientSocket.prototype.hasAnyChannelOutputConsumer = function (consumerId) {
+  return this._channelDataDemux.hasConsumerAll(consumerId);
+};
+
+AGClientSocket.prototype.hasAnyChannelListenerConsumer = function (consumerId) {
+  return this._channelEventDemux.hasConsumerAll(consumerId);
+};
+
+AGClientSocket.prototype.getChannelState = function (channelName) {
+  let channel = this._channelMap[channelName];
   if (channel) {
-    channel.unwatch();
-    channel.unsubscribe();
-    delete this.channels[channelName];
+    return channel.state;
   }
+  return AGChannel.UNSUBSCRIBED;
 };
 
-SCClientSocket.prototype.subscriptions = function (includePending) {
-  var subs = [];
-  var channel, includeChannel;
-  for (var channelName in this.channels) {
-    if (this.channels.hasOwnProperty(channelName)) {
-      channel = this.channels[channelName];
-
-      if (includePending) {
-        includeChannel = channel && (channel.state === channel.SUBSCRIBED ||
-          channel.state === channel.PENDING);
-      } else {
-        includeChannel = channel && channel.state === channel.SUBSCRIBED;
-      }
-
-      if (includeChannel) {
-        subs.push(channelName);
-      }
-    }
+AGClientSocket.prototype.getChannelOptions = function (channelName) {
+  let channel = this._channelMap[channelName];
+  if (channel) {
+    return {...channel.options};
   }
+  return {};
+};
+
+AGClientSocket.prototype._getAllChannelStreamNames = function (channelName) {
+  let streamNamesLookup = this._channelEventDemux.getConsumerStatsListAll()
+  .filter((stats) => {
+    return stats.stream.indexOf(`${channelName}/`) === 0;
+  })
+  .reduce((accumulator, stats) => {
+    accumulator[stats.stream] = true;
+    return accumulator;
+  }, {});
+  return Object.keys(streamNamesLookup);
+};
+
+AGClientSocket.prototype.channelCloseOutput = function (channelName) {
+  this._channelDataDemux.close(channelName);
+};
+
+AGClientSocket.prototype.channelCloseListener = function (channelName, eventName) {
+  this._channelEventDemux.close(`${channelName}/${eventName}`);
+};
+
+AGClientSocket.prototype.channelCloseAllListeners = function (channelName) {
+  let listenerStreams = this._getAllChannelStreamNames(channelName)
+  .forEach((streamName) => {
+    this._channelEventDemux.close(streamName);
+  });
+};
+
+AGClientSocket.prototype.channelKillOutput = function (channelName) {
+  this._channelDataDemux.kill(channelName);
+};
+
+AGClientSocket.prototype.channelKillListener = function (channelName, eventName) {
+  this._channelEventDemux.kill(`${channelName}/${eventName}`);
+};
+
+AGClientSocket.prototype.channelKillAllListeners = function (channelName) {
+  let listenerStreams = this._getAllChannelStreamNames(channelName)
+  .forEach((streamName) => {
+    this._channelEventDemux.kill(streamName);
+  });
+};
+
+AGClientSocket.prototype.channelGetOutputConsumerStatsList = function (channelName) {
+  return this._channelDataDemux.getConsumerStatsList(channelName);
+};
+
+AGClientSocket.prototype.channelGetListenerConsumerStatsList = function (channelName, eventName) {
+  return this._channelEventDemux.getConsumerStatsList(`${channelName}/${eventName}`);
+};
+
+AGClientSocket.prototype.channelGetAllListenersConsumerStatsList = function (channelName) {
+  return this._getAllChannelStreamNames(channelName)
+  .map((streamName) => {
+    return this._channelEventDemux.getConsumerStatsList(streamName);
+  })
+  .reduce((accumulator, statsList) => {
+    statsList.forEach((stats) => {
+      accumulator.push(stats);
+    });
+    return accumulator;
+  }, []);
+};
+
+AGClientSocket.prototype.channelGetOutputBackpressure = function (channelName) {
+  return this._channelDataDemux.getBackpressure(channelName);
+};
+
+AGClientSocket.prototype.channelGetListenerBackpressure = function (channelName, eventName) {
+  return this._channelEventDemux.getBackpressure(`${channelName}/${eventName}`);
+};
+
+AGClientSocket.prototype.channelGetAllListenersBackpressure = function (channelName) {
+  let listenerStreamBackpressures = this._getAllChannelStreamNames(channelName)
+  .map((streamName) => {
+    return this._channelEventDemux.getBackpressure(streamName);
+  });
+  return Math.max(...listenerStreamBackpressures.concat(0));
+};
+
+AGClientSocket.prototype.channelHasOutputConsumer = function (channelName, consumerId) {
+  return this._channelDataDemux.hasConsumer(channelName, consumerId);
+};
+
+AGClientSocket.prototype.channelHasListenerConsumer = function (channelName, eventName, consumerId) {
+  return this._channelEventDemux.hasConsumer(`${channelName}/${eventName}`, consumerId);
+};
+
+AGClientSocket.prototype.channelHasAnyListenerConsumer = function (channelName, consumerId) {
+  return this._getAllChannelStreamNames(channelName)
+  .some((streamName) => {
+    return this._channelEventDemux.hasConsumer(streamName, consumerId);
+  });
+};
+
+AGClientSocket.prototype.subscriptions = function (includePending) {
+  let subs = [];
+  Object.keys(this._channelMap).forEach((channelName) => {
+    if (includePending || this._channelMap[channelName].state === AGChannel.SUBSCRIBED) {
+      subs.push(channelName);
+    }
+  });
   return subs;
 };
 
-SCClientSocket.prototype.isSubscribed = function (channelName, includePending) {
-  var channel = this.channels[channelName];
+AGClientSocket.prototype.isSubscribed = function (channelName, includePending) {
+  let channel = this._channelMap[channelName];
   if (includePending) {
-    return !!channel && (channel.state === channel.SUBSCRIBED ||
-      channel.state === channel.PENDING);
+    return !!channel;
   }
-  return !!channel && channel.state === channel.SUBSCRIBED;
+  return !!channel && channel.state === AGChannel.SUBSCRIBED;
 };
 
-SCClientSocket.prototype.processPendingSubscriptions = function () {
-  var self = this;
-
+AGClientSocket.prototype.processPendingSubscriptions = function () {
   this.preparingPendingSubscriptions = false;
+  let pendingChannels = [];
 
-  var pendingChannels = [];
-
-  for (var i in this.channels) {
-    if (this.channels.hasOwnProperty(i)) {
-      var channel = this.channels[i];
-      if (channel.state === channel.PENDING) {
-        pendingChannels.push(channel);
-      }
+  Object.keys(this._channelMap).forEach((channelName) => {
+    let channel = this._channelMap[channelName];
+    if (channel.state === AGChannel.PENDING) {
+      pendingChannels.push(channel);
     }
-  }
+  });
 
-  pendingChannels.sort(function (a, b) {
-    var ap = a.priority || 0;
-    var bp = b.priority || 0;
+  pendingChannels.sort((a, b) => {
+    let ap = a.options.priority || 0;
+    let bp = b.options.priority || 0;
     if (ap > bp) {
       return -1;
     }
@@ -1260,40 +1547,82 @@ SCClientSocket.prototype.processPendingSubscriptions = function () {
     return 0;
   });
 
-  pendingChannels.forEach(function (channel) {
-    self._trySubscribe(channel);
+  pendingChannels.forEach((channel) => {
+    this._trySubscribe(channel);
   });
 };
 
-SCClientSocket.prototype.watch = function (channelName, handler) {
-  if (typeof handler !== 'function') {
-    throw new InvalidArgumentsError('No handler function was provided');
-  }
-  this._channelEmitter.on(channelName, handler);
-};
-
-SCClientSocket.prototype.unwatch = function (channelName, handler) {
-  if (handler) {
-    this._channelEmitter.removeListener(channelName, handler);
-  } else {
-    this._channelEmitter.removeAllListeners(channelName);
-  }
-};
-
-SCClientSocket.prototype.watchers = function (channelName) {
-  return this._channelEmitter.listeners(channelName);
-};
-
-module.exports = SCClientSocket;
+module.exports = AGClientSocket;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./auth":2,"./response":4,"./sctransport":6,"buffer/":9,"clone":10,"component-emitter":11,"linked-list":14,"querystring":17,"sc-channel":18,"sc-errors":20,"sc-formatter":21}],6:[function(_dereq_,module,exports){
+},{"./auth":1,"./transport":4,"./wait":5,"ag-channel":7,"async-stream-emitter":9,"buffer/":11,"clone-deep":12,"linked-list":19,"querystring":22,"sc-errors":24,"sc-formatter":25,"stream-demux":28}],3:[function(require,module,exports){
 (function (global){
-var Emitter = _dereq_('component-emitter');
-var Response = _dereq_('./response').Response;
-var querystring = _dereq_('querystring');
-var WebSocket;
-var createWebSocket;
+const AGClientSocket = require('./clientsocket');
+const uuid = require('uuid');
+const scErrors = require('sc-errors');
+const InvalidArgumentsError = scErrors.InvalidArgumentsError;
+
+function isUrlSecure() {
+  return global.location && location.protocol === 'https:';
+}
+
+function getPort(options, isSecureDefault) {
+  let isSecure = options.secure == null ? isSecureDefault : options.secure;
+  return options.port || (global.location && location.port ? location.port : isSecure ? 443 : 80);
+}
+
+function create(options) {
+  options = options || {};
+
+  if (options.host && !options.host.match(/[^:]+:\d{2,5}/)) {
+    throw new InvalidArgumentsError(
+      'The host option should include both' +
+      ' the hostname and the port number in the format "hostname:port"'
+    );
+  }
+
+  if (options.host && options.hostname) {
+    throw new InvalidArgumentsError(
+      'The host option should already include' +
+      ' the hostname and the port number in the format "hostname:port"' +
+      ' - Because of this, you should never use host and hostname options together'
+    );
+  }
+
+  if (options.host && options.port) {
+    throw new InvalidArgumentsError(
+      'The host option should already include' +
+      ' the hostname and the port number in the format "hostname:port"' +
+      ' - Because of this, you should never use host and port options together'
+    );
+  }
+
+  let isSecureDefault = isUrlSecure();
+
+  let opts = {
+    clientId: uuid.v4(),
+    port: getPort(options, isSecureDefault),
+    hostname: global.location && location.hostname || 'localhost',
+    secure: isSecureDefault
+  };
+
+  Object.assign(opts, options);
+
+  return new AGClientSocket(opts);
+}
+
+module.exports = {
+  create
+};
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"./clientsocket":2,"sc-errors":24,"uuid":29}],4:[function(require,module,exports){
+(function (global){
+const AGRequest = require('ag-request');
+const querystring = require('querystring');
+
+let WebSocket;
+let createWebSocket;
 
 if (global.WebSocket) {
   WebSocket = global.WebSocket;
@@ -1301,93 +1630,131 @@ if (global.WebSocket) {
     return new WebSocket(uri);
   };
 } else {
-  WebSocket = _dereq_('ws');
+  WebSocket = require('ws');
   createWebSocket = function (uri, options) {
     return new WebSocket(uri, null, options);
   };
 }
 
-var scErrors = _dereq_('sc-errors');
-var TimeoutError = scErrors.TimeoutError;
-var BadConnectionError = scErrors.BadConnectionError;
+const scErrors = require('sc-errors');
+const TimeoutError = scErrors.TimeoutError;
+const BadConnectionError = scErrors.BadConnectionError;
 
-
-var SCTransport = function (authEngine, codecEngine, options) {
-  var self = this;
-
+function AGTransport(authEngine, codecEngine, options, wsOptions, handlers) {
   this.state = this.CLOSED;
   this.auth = authEngine;
   this.codec = codecEngine;
   this.options = options;
+  this.wsOptions = wsOptions;
+  this.protocolVersion = options.protocolVersion;
   this.connectTimeout = options.connectTimeout;
-  this.pingTimeout = options.ackTimeout;
+  this.pingTimeout = options.pingTimeout;
   this.pingTimeoutDisabled = !!options.pingTimeoutDisabled;
   this.callIdGenerator = options.callIdGenerator;
   this.authTokenName = options.authTokenName;
+  this.isBufferingBatch = false;
 
   this._pingTimeoutTicker = null;
   this._callbackMap = {};
-  this._batchSendList = [];
+  this._batchBuffer = [];
+
+  if (!handlers) {
+    handlers = {};
+  }
+
+  this._onOpenHandler = handlers.onOpen || function () {};
+  this._onOpenAbortHandler = handlers.onOpenAbort || function () {};
+  this._onCloseHandler = handlers.onClose || function () {};
+  this._onEventHandler = handlers.onEvent || function () {};
+  this._onErrorHandler = handlers.onError || function () {};
+  this._onInboundInvokeHandler  = handlers.onInboundInvoke || function () {};
+  this._onInboundTransmitHandler = handlers.onInboundTransmit || function () {};
 
   // Open the connection.
 
   this.state = this.CONNECTING;
-  var uri = this.uri();
+  let uri = this.uri();
 
-  var wsSocket = createWebSocket(uri, this.options);
+  let wsSocket = createWebSocket(uri, wsOptions);
   wsSocket.binaryType = this.options.binaryType;
 
   this.socket = wsSocket;
 
-  wsSocket.onopen = function () {
-    self._onOpen();
+  wsSocket.onopen = () => {
+    this._onOpen();
   };
 
-  wsSocket.onclose = function (event) {
-    var code;
+  wsSocket.onclose = async (event) => {
+    let code;
     if (event.code == null) {
       // This is to handle an edge case in React Native whereby
       // event.code is undefined when the mobile device is locked.
-      // TODO: This is not perfect since this condition could also apply to
+      // TODO: This is not ideal since this condition could also apply to
       // an abnormal close (no close control frame) which would be a 1006.
       code = 1005;
     } else {
       code = event.code;
     }
-    self._onClose(code, event.reason);
+    this._destroy(code, event.reason);
   };
 
-  wsSocket.onmessage = function (message, flags) {
-    self._onMessage(message.data);
+  wsSocket.onmessage = (message, flags) => {
+    this._onMessage(message.data);
   };
 
-  wsSocket.onerror = function (error) {
+  wsSocket.onerror = (error) => {
     // The onclose event will be called automatically after the onerror event
     // if the socket is connected - Otherwise, if it's in the middle of
     // connecting, we want to close it manually with a 1006 - This is necessary
     // to prevent inconsistent behavior when running the client in Node.js
     // vs in a browser.
-
-    if (self.state === self.CONNECTING) {
-      self._onClose(1006);
+    if (this.state === this.CONNECTING) {
+      this._destroy(1006);
     }
   };
 
-  this._connectTimeoutRef = setTimeout(function () {
-    self._onClose(4007);
-    self.socket.close(4007);
+  this._connectTimeoutRef = setTimeout(() => {
+    this._destroy(4007);
+    this.socket.close(4007);
   }, this.connectTimeout);
-};
 
-SCTransport.prototype = Object.create(Emitter.prototype);
+  if (this.protocolVersion === 1) {
+    this._handlePing = (message) => {
+      if (message === '#1') {
+        this._resetPingTimeout();
+        if (this.socket.readyState === this.socket.OPEN) {
+          this.send('#2');
+        }
+        return true;
+      }
+      return false;
+    };
+  } else {
+    this._handlePing = (message) => {
+      if (message === '') {
+        this._resetPingTimeout();
+        if (this.socket.readyState === this.socket.OPEN) {
+          this.send('');
+        }
+        return true;
+      }
+      return false;
+    };
+  }
+}
 
-SCTransport.CONNECTING = SCTransport.prototype.CONNECTING = 'connecting';
-SCTransport.OPEN = SCTransport.prototype.OPEN = 'open';
-SCTransport.CLOSED = SCTransport.prototype.CLOSED = 'closed';
+AGTransport.CONNECTING = AGTransport.prototype.CONNECTING = 'connecting';
+AGTransport.OPEN = AGTransport.prototype.OPEN = 'open';
+AGTransport.CLOSED = AGTransport.prototype.CLOSED = 'closed';
 
-SCTransport.prototype.uri = function () {
-  var query = this.options.query || {};
-  var schema = this.options.secure ? 'wss' : 'ws';
+AGTransport.prototype.uri = function () {
+  let query = this.options.query || {};
+  let scheme;
+  if (this.options.protocolScheme == null) {
+    scheme = this.options.secure ? 'wss' : 'ws';
+  } else {
+    scheme = this.options.protocolScheme;
+  }
 
   if (this.options.timestampRequests) {
     query[this.options.timestampParam] = (new Date()).getTime();
@@ -1399,96 +1766,96 @@ SCTransport.prototype.uri = function () {
     query = '?' + query;
   }
 
-  var host;
-  if (this.options.host) {
-    host = this.options.host;
-  } else {
-    var port = '';
+  let host;
+  let path;
+  if (this.options.socketPath == null) {
+    if (this.options.host) {
+      host = this.options.host;
+    } else {
+      let port = '';
 
-    if (this.options.port && ((schema === 'wss' && this.options.port !== 443)
-      || (schema === 'ws' && this.options.port !== 80))) {
-      port = ':' + this.options.port;
+      if (this.options.port && ((scheme === 'wss' && this.options.port !== 443)
+        || (scheme === 'ws' && this.options.port !== 80))) {
+        port = ':' + this.options.port;
+      }
+      host = this.options.hostname + port;
     }
-    host = this.options.hostname + port;
+    path = this.options.path;
+  } else {
+    host = this.options.socketPath;
+    path = `:${this.options.path}`;
   }
-
-  return schema + '://' + host + this.options.path + query;
+  return scheme + '://' + host + path + query;
 };
 
-SCTransport.prototype._onOpen = function () {
-  var self = this;
-
+AGTransport.prototype._onOpen = async function () {
   clearTimeout(this._connectTimeoutRef);
   this._resetPingTimeout();
 
-  this._handshake(function (err, status) {
-    if (err) {
-      var statusCode;
-      if (status && status.code) {
-        statusCode = status.code;
-      } else {
-        statusCode = 4003;
-      }
-      self._onError(err);
-      self._onClose(statusCode, err.toString());
-      self.socket.close(statusCode);
-    } else {
-      self.state = self.OPEN;
-      Emitter.prototype.emit.call(self, 'open', status);
-      self._resetPingTimeout();
+  let status;
+
+  try {
+    status = await this._handshake();
+  } catch (err) {
+    if (err.statusCode == null) {
+      err.statusCode = 4003;
     }
-  });
+    this._onError(err);
+    this._destroy(err.statusCode, err.toString());
+    this.socket.close(err.statusCode);
+    return;
+  }
+
+  this.state = this.OPEN;
+  if (status) {
+    this.pingTimeout = status.pingTimeout;
+  }
+  this._resetPingTimeout();
+  this._onOpenHandler(status);
 };
 
-SCTransport.prototype._handshake = function (callback) {
-  var self = this;
-  this.auth.loadToken(this.authTokenName, function (err, token) {
-    if (err) {
-      callback(err);
-    } else {
-      // Don't wait for this.state to be 'open'.
-      // The underlying WebSocket (this.socket) is already open.
-      var options = {
-        force: true
-      };
-      self.emit('#handshake', {
-        authToken: token
-      }, options, function (err, status) {
-        if (status) {
-          // Add the token which was used as part of authentication attempt
-          // to the status object.
-          status.authToken = token;
-          if (status.authError) {
-            status.authError = scErrors.hydrateError(status.authError);
-          }
-        }
-        callback(err, status);
-      });
-    }
-  });
-};
-
-SCTransport.prototype._abortAllPendingEventsDueToBadConnection = function (failureType) {
-  for (var i in this._callbackMap) {
-    if (this._callbackMap.hasOwnProperty(i)) {
-      var eventObject = this._callbackMap[i];
-      delete this._callbackMap[i];
-
-      clearTimeout(eventObject.timeout);
-      delete eventObject.timeout;
-
-      var errorMessage = "Event '" + eventObject.event +
-        "' was aborted due to a bad connection";
-      var badConnectionError = new BadConnectionError(errorMessage, failureType);
-
-      var callback = eventObject.callback;
-      delete eventObject.callback;
-      callback.call(eventObject, badConnectionError, eventObject);
+AGTransport.prototype._handshake = async function () {
+  let token = await this.auth.loadToken(this.authTokenName);
+  // Don't wait for this.state to be 'open'.
+  // The underlying WebSocket (this.socket) is already open.
+  let options = {
+    force: true
+  };
+  let status = await this.invoke('#handshake', {authToken: token}, options);
+  if (status) {
+    // Add the token which was used as part of authentication attempt
+    // to the status object.
+    status.authToken = token;
+    if (status.authError) {
+      status.authError = scErrors.hydrateError(status.authError);
     }
   }
+  return status;
 };
 
-SCTransport.prototype._onClose = function (code, data) {
+AGTransport.prototype._abortAllPendingEventsDueToBadConnection = function (failureType) {
+  Object.keys(this._callbackMap || {}).forEach((i) => {
+    let eventObject = this._callbackMap[i];
+    delete this._callbackMap[i];
+
+    clearTimeout(eventObject.timeout);
+    delete eventObject.timeout;
+
+    let errorMessage = `Event "${eventObject.event}" was aborted due to a bad connection`;
+    let badConnectionError = new BadConnectionError(errorMessage, failureType);
+
+    let callback = eventObject.callback;
+    delete eventObject.callback;
+
+    callback.call(eventObject, badConnectionError, eventObject);
+  });
+};
+
+AGTransport.prototype._destroy = function (code, reason) {
+  let protocolReason = scErrors.socketProtocolErrorStatuses[code];
+  if (!reason && scErrors.socketProtocolErrorStatuses[code]) {
+    reason = scErrors.socketProtocolErrorStatuses[code];
+  }
   delete this.socket.onopen;
   delete this.socket.onclose;
   delete this.socket.onmessage;
@@ -1496,108 +1863,125 @@ SCTransport.prototype._onClose = function (code, data) {
 
   clearTimeout(this._connectTimeoutRef);
   clearTimeout(this._pingTimeoutTicker);
-  clearTimeout(this._batchTimeout);
 
   if (this.state === this.OPEN) {
     this.state = this.CLOSED;
-    Emitter.prototype.emit.call(this, 'close', code, data);
     this._abortAllPendingEventsDueToBadConnection('disconnect');
-
+    this._onCloseHandler({code, reason});
   } else if (this.state === this.CONNECTING) {
     this.state = this.CLOSED;
-    Emitter.prototype.emit.call(this, 'openAbort', code, data);
+    this._abortAllPendingEventsDueToBadConnection('connectAbort');
+    this._onOpenAbortHandler({code, reason});
+  } else if (this.state === this.CLOSED) {
     this._abortAllPendingEventsDueToBadConnection('connectAbort');
   }
 };
 
-SCTransport.prototype._handleEventObject = function (obj, message) {
-  if (obj && obj.event != null) {
-    var response = new Response(this, obj.cid);
-    Emitter.prototype.emit.call(this, 'event', obj.event, obj.data, response);
-  } else if (obj && obj.rid != null) {
-    var eventObject = this._callbackMap[obj.rid];
+AGTransport.prototype._processInboundPacket = function (packet, message) {
+  if (packet && packet.event != null) {
+    if (packet.cid == null) {
+      this._onInboundTransmitHandler({...packet});
+    } else {
+      let request = new AGRequest(this, packet.cid, packet.event, packet.data);
+      this._onInboundInvokeHandler(request);
+    }
+  } else if (packet && packet.rid != null) {
+    let eventObject = this._callbackMap[packet.rid];
     if (eventObject) {
       clearTimeout(eventObject.timeout);
       delete eventObject.timeout;
-      delete this._callbackMap[obj.rid];
+      delete this._callbackMap[packet.rid];
 
       if (eventObject.callback) {
-        var rehydratedError = scErrors.hydrateError(obj.error);
-        eventObject.callback(rehydratedError, obj.data);
+        let rehydratedError = scErrors.hydrateError(packet.error);
+        eventObject.callback(rehydratedError, packet.data);
       }
     }
   } else {
-    Emitter.prototype.emit.call(this, 'event', 'raw', message);
+    this._onEventHandler({event: 'raw', data: {message}});
   }
 };
 
-SCTransport.prototype._onMessage = function (message) {
-  Emitter.prototype.emit.call(this, 'event', 'message', message);
+AGTransport.prototype._onMessage = function (message) {
+  this._onEventHandler({event: 'message', data: {message}});
 
-  var obj = this.decode(message);
+  if (this._handlePing(message)) {
+    return;
+  }
 
-  // If ping
-  if (obj === '#1') {
-    this._resetPingTimeout();
-    if (this.socket.readyState === this.socket.OPEN) {
-      this.sendObject('#2');
+  let packet = this.decode(message);
+
+  if (Array.isArray(packet)) {
+    let len = packet.length;
+    for (let i = 0; i < len; i++) {
+      this._processInboundPacket(packet[i], message);
     }
   } else {
-    if (Array.isArray(obj)) {
-      var len = obj.length;
-      for (var i = 0; i < len; i++) {
-        this._handleEventObject(obj[i], message);
-      }
-    } else {
-      this._handleEventObject(obj, message);
-    }
+    this._processInboundPacket(packet, message);
   }
 };
 
-SCTransport.prototype._onError = function (err) {
-  Emitter.prototype.emit.call(this, 'error', err);
+AGTransport.prototype._onError = function (error) {
+  this._onErrorHandler({error});
 };
 
-SCTransport.prototype._resetPingTimeout = function () {
+AGTransport.prototype._resetPingTimeout = function () {
   if (this.pingTimeoutDisabled) {
     return;
   }
-  var self = this;
 
-  var now = (new Date()).getTime();
+  let now = (new Date()).getTime();
   clearTimeout(this._pingTimeoutTicker);
-
-  this._pingTimeoutTicker = setTimeout(function () {
-    self._onClose(4000);
-    self.socket.close(4000);
+  this._pingTimeoutTicker = setTimeout(() => {
+    this._destroy(4000);
+    this.socket.close(4000);
   }, this.pingTimeout);
 };
 
-SCTransport.prototype.getBytesReceived = function () {
+AGTransport.prototype.clearAllListeners = function () {
+  this._onOpenHandler = function () {};
+  this._onOpenAbortHandler = function () {};
+  this._onCloseHandler = function () {};
+  this._onEventHandler = function () {};
+  this._onErrorHandler = function () {};
+  this._onInboundInvokeHandler  = function () {};
+  this._onInboundTransmitHandler = function () {};
+};
+
+AGTransport.prototype.startBatch = function () {
+  this.isBufferingBatch = true;
+  this._batchBuffer = [];
+};
+
+AGTransport.prototype.flushBatch = function () {
+  this.isBufferingBatch = false;
+  if (!this._batchBuffer.length) {
+    return;
+  }
+  let serializedBatch = this.serializeObject(this._batchBuffer);
+  this._batchBuffer = [];
+  this.send(serializedBatch);
+};
+
+AGTransport.prototype.cancelBatch = function () {
+  this.isBufferingBatch = false;
+  this._batchBuffer = [];
+};
+
+AGTransport.prototype.getBytesReceived = function () {
   return this.socket.bytesReceived;
 };
 
-SCTransport.prototype.close = function (code, data) {
-  code = code || 1000;
-
-  if (this.state === this.OPEN) {
-    var packet = {
-      code: code,
-      data: data
-    };
-    this.emit('#disconnect', packet);
-
-    this._onClose(code, data);
-    this.socket.close(code);
-
-  } else if (this.state === this.CONNECTING) {
-    this._onClose(code, data);
-    this.socket.close(code);
+AGTransport.prototype.close = function (code, reason) {
+  if (this.state === this.OPEN || this.state === this.CONNECTING) {
+    code = code || 1000;
+    this._destroy(code, reason);
+    this.socket.close(code, reason);
   }
 };
 
-SCTransport.prototype.emitObject = function (eventObject, options) {
-  var simpleEventObject = {
+AGTransport.prototype.transmitObject = function (eventObject) {
+  let simpleEventObject = {
     event: eventObject.event,
     data: eventObject.data
   };
@@ -1607,143 +1991,133 @@ SCTransport.prototype.emitObject = function (eventObject, options) {
     this._callbackMap[eventObject.cid] = eventObject;
   }
 
-  this.sendObject(simpleEventObject, options);
+  this.sendObject(simpleEventObject);
 
   return eventObject.cid || null;
 };
 
-SCTransport.prototype._handleEventAckTimeout = function (eventObject) {
+AGTransport.prototype._handleEventAckTimeout = function (eventObject) {
   if (eventObject.cid) {
     delete this._callbackMap[eventObject.cid];
   }
   delete eventObject.timeout;
 
-  var callback = eventObject.callback;
+  let callback = eventObject.callback;
   if (callback) {
     delete eventObject.callback;
-    var error = new TimeoutError("Event response for '" + eventObject.event + "' timed out");
+    let error = new TimeoutError(`Event response for "${eventObject.event}" timed out`);
     callback.call(eventObject, error, eventObject);
   }
 };
 
-// The last two optional arguments (a and b) can be options and/or callback
-SCTransport.prototype.emit = function (event, data, a, b) {
-  var self = this;
-
-  var callback, options;
-
-  if (b) {
-    options = a;
-    callback = b;
-  } else {
-    if (a instanceof Function) {
-      options = {};
-      callback = a;
-    } else {
-      options = a;
-    }
-  }
-
-  var eventObject = {
-    event: event,
-    data: data,
-    callback: callback
+AGTransport.prototype.transmit = function (event, data, options) {
+  let eventObject = {
+    event,
+    data
   };
 
-  if (callback && !options.noTimeout) {
-    eventObject.timeout = setTimeout(function () {
-      self._handleEventAckTimeout(eventObject);
+  if (this.state === this.OPEN || options.force) {
+    this.transmitObject(eventObject);
+  }
+  return Promise.resolve();
+};
+
+AGTransport.prototype.invokeRaw = function (event, data, options, callback) {
+  let eventObject = {
+    event,
+    data,
+    callback
+  };
+
+  if (!options.noTimeout) {
+    eventObject.timeout = setTimeout(() => {
+      this._handleEventAckTimeout(eventObject);
     }, this.options.ackTimeout);
   }
-
-  var cid = null;
+  let cid = null;
   if (this.state === this.OPEN || options.force) {
-    cid = this.emitObject(eventObject, options);
+    cid = this.transmitObject(eventObject);
   }
   return cid;
 };
 
-SCTransport.prototype.cancelPendingResponse = function (cid) {
+AGTransport.prototype.invoke = function (event, data, options) {
+  return new Promise((resolve, reject) => {
+    this.invokeRaw(event, data, options, (err, data) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(data);
+    });
+  });
+};
+
+AGTransport.prototype.cancelPendingResponse = function (cid) {
   delete this._callbackMap[cid];
 };
 
-SCTransport.prototype.decode = function (message) {
+AGTransport.prototype.decode = function (message) {
   return this.codec.decode(message);
 };
 
-SCTransport.prototype.encode = function (object) {
+AGTransport.prototype.encode = function (object) {
   return this.codec.encode(object);
 };
 
-SCTransport.prototype.send = function (data) {
+AGTransport.prototype.send = function (data) {
   if (this.socket.readyState !== this.socket.OPEN) {
-    this._onClose(1005);
+    this._destroy(1005);
   } else {
     this.socket.send(data);
   }
 };
 
-SCTransport.prototype.serializeObject = function (object) {
-  var str, formatError;
+AGTransport.prototype.serializeObject = function (object) {
+  let str;
   try {
     str = this.encode(object);
-  } catch (err) {
-    formatError = err;
-    this._onError(formatError);
+  } catch (error) {
+    this._onError(error);
+    return null;
   }
-  if (!formatError) {
-    return str;
-  }
-  return null;
+  return str;
 };
 
-SCTransport.prototype.sendObjectBatch = function (object) {
-  var self = this;
-
-  this._batchSendList.push(object);
-  if (this._batchTimeout) {
+AGTransport.prototype.sendObject = function (object) {
+  if (this.isBufferingBatch) {
+    this._batchBuffer.push(object);
     return;
   }
-
-  this._batchTimeout = setTimeout(function () {
-    delete self._batchTimeout;
-    if (self._batchSendList.length) {
-      var str = self.serializeObject(self._batchSendList);
-      if (str != null) {
-        self.send(str);
-      }
-      self._batchSendList = [];
-    }
-  }, this.options.pubSubBatchDuration || 0);
-};
-
-SCTransport.prototype.sendObjectSingle = function (object) {
-  var str = this.serializeObject(object);
+  let str = this.serializeObject(object);
   if (str != null) {
     this.send(str);
   }
 };
 
-SCTransport.prototype.sendObject = function (object, options) {
-  if (options && options.batch) {
-    this.sendObjectBatch(object);
-  } else {
-    this.sendObjectSingle(object);
-  }
-};
-
-module.exports.SCTransport = SCTransport;
+module.exports = AGTransport;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./response":4,"component-emitter":11,"querystring":17,"sc-errors":20,"ws":7}],7:[function(_dereq_,module,exports){
-var global;
+},{"ag-request":8,"querystring":22,"sc-errors":24,"ws":6}],5:[function(require,module,exports){
+function wait(duration) {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, duration);
+  });
+}
+
+module.exports = wait;
+
+},{}],6:[function(require,module,exports){
+let global;
 if (typeof WorkerGlobalScope !== 'undefined') {
   global = self;
 } else {
   global = typeof window !== 'undefined' && window || (function() { return this; })();
 }
 
-var WebSocket = global.WebSocket || global.MozWebSocket;
+const WebSocket = global.WebSocket || global.MozWebSocket;
 
 /**
  * WebSocket constructor.
@@ -1759,7 +2133,7 @@ var WebSocket = global.WebSocket || global.MozWebSocket;
  */
 
 function ws(uri, protocols, opts) {
-  var instance;
+  let instance;
   if (protocols) {
     instance = new WebSocket(uri, protocols);
   } else {
@@ -1772,7 +2146,296 @@ if (WebSocket) ws.prototype = WebSocket.prototype;
 
 module.exports = WebSocket ? ws : null;
 
-},{}],8:[function(_dereq_,module,exports){
+},{}],7:[function(require,module,exports){
+const ConsumableStream = require('consumable-stream');
+
+class AGChannel extends ConsumableStream {
+  constructor(name, client, eventDemux, dataDemux) {
+    super();
+    this.PENDING = AGChannel.PENDING;
+    this.SUBSCRIBED = AGChannel.SUBSCRIBED;
+    this.UNSUBSCRIBED = AGChannel.UNSUBSCRIBED;
+
+    this.name = name;
+    this.client = client;
+
+    this._eventDemux = eventDemux;
+    this._dataStream = dataDemux.stream(this.name);
+  }
+
+  createConsumer(timeout) {
+    return this._dataStream.createConsumer(timeout);
+  }
+
+  listener(eventName) {
+    return this._eventDemux.stream(`${this.name}/${eventName}`);
+  }
+
+  close() {
+    this.client.closeChannel(this.name);
+  }
+
+  kill() {
+    this.client.killChannel(this.name);
+  }
+
+  killOutputConsumer(consumerId) {
+    if (this.hasOutputConsumer(consumerId)) {
+      this.client.killChannelOutputConsumer(consumerId);
+    }
+  }
+
+  killListenerConsumer(consumerId) {
+    if (this.hasAnyListenerConsumer(consumerId)) {
+      this.client.killChannelListenerConsumer(consumerId);
+    }
+  }
+
+  getOutputConsumerStats(consumerId) {
+    if (this.hasOutputConsumer(consumerId)) {
+      return this.client.getChannelOutputConsumerStats(consumerId);
+    }
+    return undefined;
+  }
+
+  getListenerConsumerStats(consumerId) {
+    if (this.hasAnyListenerConsumer(consumerId)) {
+      return this.client.getChannelListenerConsumerStats(consumerId);
+    }
+    return undefined;
+  }
+
+  getBackpressure() {
+    return this.client.getChannelBackpressure(this.name);
+  }
+
+  getListenerConsumerBackpressure(consumerId) {
+    if (this.hasAnyListenerConsumer(consumerId)) {
+      return this.client.getChannelListenerConsumerBackpressure(consumerId);
+    }
+    return 0;
+  }
+
+  getOutputConsumerBackpressure(consumerId) {
+    if (this.hasOutputConsumer(consumerId)) {
+      return this.client.getChannelOutputConsumerBackpressure(consumerId);
+    }
+    return 0;
+  }
+
+  closeOutput() {
+    this.client.channelCloseOutput(this.name);
+  }
+
+  closeListener(eventName) {
+    this.client.channelCloseListener(this.name, eventName);
+  }
+
+  closeAllListeners() {
+    this.client.channelCloseAllListeners(this.name);
+  }
+
+  killOutput() {
+    this.client.channelKillOutput(this.name);
+  }
+
+  killListener(eventName) {
+    this.client.channelKillListener(this.name, eventName);
+  }
+
+  killAllListeners() {
+    this.client.channelKillAllListeners(this.name);
+  }
+
+  getOutputConsumerStatsList() {
+    return this.client.channelGetOutputConsumerStatsList(this.name);
+  }
+
+  getListenerConsumerStatsList(eventName) {
+    return this.client.channelGetListenerConsumerStatsList(this.name, eventName);
+  }
+
+  getAllListenersConsumerStatsList() {
+    return this.client.channelGetAllListenersConsumerStatsList(this.name);
+  }
+
+  getOutputBackpressure() {
+    return this.client.channelGetOutputBackpressure(this.name);
+  }
+
+  getListenerBackpressure(eventName) {
+    return this.client.channelGetListenerBackpressure(this.name, eventName);
+  }
+
+  getAllListenersBackpressure() {
+    return this.client.channelGetAllListenersBackpressure(this.name);
+  }
+
+  hasOutputConsumer(consumerId) {
+    return this.client.channelHasOutputConsumer(this.name, consumerId);
+  }
+
+  hasListenerConsumer(eventName, consumerId) {
+    return this.client.channelHasListenerConsumer(this.name, eventName, consumerId);
+  }
+
+  hasAnyListenerConsumer(consumerId) {
+    return this.client.channelHasAnyListenerConsumer(this.name, consumerId);
+  }
+
+  get state() {
+    return this.client.getChannelState(this.name);
+  }
+
+  set state(value) {
+    throw new Error('Cannot directly set channel state');
+  }
+
+  get options() {
+    return this.client.getChannelOptions(this.name);
+  }
+
+  set options(value) {
+    throw new Error('Cannot directly set channel options');
+  }
+
+  subscribe(options) {
+    this.client.subscribe(this.name, options);
+  }
+
+  unsubscribe() {
+    this.client.unsubscribe(this.name);
+  }
+
+  isSubscribed(includePending) {
+    return this.client.isSubscribed(this.name, includePending);
+  }
+
+  transmitPublish(data) {
+    return this.client.transmitPublish(this.name, data);
+  }
+
+  invokePublish(data) {
+    return this.client.invokePublish(this.name, data);
+  }
+}
+
+AGChannel.PENDING = 'pending';
+AGChannel.SUBSCRIBED = 'subscribed';
+AGChannel.UNSUBSCRIBED = 'unsubscribed';
+
+module.exports = AGChannel;
+
+},{"consumable-stream":13}],8:[function(require,module,exports){
+const scErrors = require('sc-errors');
+const InvalidActionError = scErrors.InvalidActionError;
+
+function AGRequest(socket, id, procedureName, data) {
+  this.socket = socket;
+  this.id = id;
+  this.procedure = procedureName;
+  this.data = data;
+  this.sent = false;
+
+  this._respond = (responseData, options) => {
+    if (this.sent) {
+      throw new InvalidActionError(`Response to request ${this.id} has already been sent`);
+    }
+    this.sent = true;
+    this.socket.sendObject(responseData, options);
+  };
+
+  this.end = (data, options) => {
+    let responseData = {
+      rid: this.id
+    };
+    if (data !== undefined) {
+      responseData.data = data;
+    }
+    this._respond(responseData, options);
+  };
+
+  this.error = (error, options) => {
+    let responseData = {
+      rid: this.id,
+      error: scErrors.dehydrateError(error)
+    };
+    this._respond(responseData, options);
+  };
+}
+
+module.exports = AGRequest;
+
+},{"sc-errors":24}],9:[function(require,module,exports){
+const StreamDemux = require('stream-demux');
+
+function AsyncStreamEmitter() {
+  this._listenerDemux = new StreamDemux();
+}
+
+AsyncStreamEmitter.prototype.emit = function (eventName, data) {
+  this._listenerDemux.write(eventName, data);
+};
+
+AsyncStreamEmitter.prototype.listener = function (eventName) {
+  return this._listenerDemux.stream(eventName);
+};
+
+AsyncStreamEmitter.prototype.closeListener = function (eventName) {
+  this._listenerDemux.close(eventName);
+};
+
+AsyncStreamEmitter.prototype.closeAllListeners = function () {
+  this._listenerDemux.closeAll();
+};
+
+AsyncStreamEmitter.prototype.getListenerConsumerStats = function (consumerId) {
+  return this._listenerDemux.getConsumerStats(consumerId);
+};
+
+AsyncStreamEmitter.prototype.getListenerConsumerStatsList = function (eventName) {
+  return this._listenerDemux.getConsumerStatsList(eventName);
+};
+
+AsyncStreamEmitter.prototype.getAllListenersConsumerStatsList = function () {
+  return this._listenerDemux.getConsumerStatsListAll();
+};
+
+AsyncStreamEmitter.prototype.killListener = function (eventName) {
+  this._listenerDemux.kill(eventName);
+};
+
+AsyncStreamEmitter.prototype.killAllListeners = function () {
+  this._listenerDemux.killAll();
+};
+
+AsyncStreamEmitter.prototype.killListenerConsumer = function (consumerId) {
+  this._listenerDemux.killConsumer(consumerId);
+};
+
+AsyncStreamEmitter.prototype.getListenerBackpressure = function (eventName) {
+  return this._listenerDemux.getBackpressure(eventName);
+};
+
+AsyncStreamEmitter.prototype.getAllListenersBackpressure = function () {
+  return this._listenerDemux.getBackpressureAll();
+};
+
+AsyncStreamEmitter.prototype.getListenerConsumerBackpressure = function (consumerId) {
+  return this._listenerDemux.getConsumerBackpressure(consumerId);
+};
+
+AsyncStreamEmitter.prototype.hasListenerConsumer = function (eventName, consumerId) {
+  return this._listenerDemux.hasConsumer(eventName, consumerId);
+};
+
+AsyncStreamEmitter.prototype.hasAnyListenerConsumer = function (consumerId) {
+  return this._listenerDemux.hasConsumerAll(consumerId);
+};
+
+module.exports = AsyncStreamEmitter;
+
+},{"stream-demux":28}],10:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -1926,7 +2589,7 @@ function fromByteArray (uint8) {
   return parts.join('')
 }
 
-},{}],9:[function(_dereq_,module,exports){
+},{}],11:[function(require,module,exports){
 (function (Buffer){
 /*!
  * The buffer module from node.js, for the browser.
@@ -1938,8 +2601,8 @@ function fromByteArray (uint8) {
 
 'use strict'
 
-var base64 = _dereq_('base64-js')
-var ieee754 = _dereq_('ieee754')
+var base64 = require('base64-js')
+var ieee754 = require('ieee754')
 var customInspectSymbol =
   (typeof Symbol === 'function' && typeof Symbol.for === 'function')
     ? Symbol.for('nodejs.util.inspect.custom')
@@ -2998,7 +3661,7 @@ function hexSlice (buf, start, end) {
 
   var out = ''
   for (var i = start; i < end; ++i) {
-    out += toHex(buf[i])
+    out += hexSliceLookupTable[buf[i]]
   }
   return out
 }
@@ -3584,11 +4247,6 @@ function base64clean (str) {
   return str
 }
 
-function toHex (n) {
-  if (n < 16) return '0' + n.toString(16)
-  return n.toString(16)
-}
-
 function utf8ToBytes (string, units) {
   units = units || Infinity
   var codePoint
@@ -3719,428 +4377,102 @@ function numberIsNaN (obj) {
   return obj !== obj // eslint-disable-line no-self-compare
 }
 
-}).call(this,_dereq_("buffer").Buffer)
-},{"base64-js":8,"buffer":9,"ieee754":12}],10:[function(_dereq_,module,exports){
-(function (Buffer){
-var clone = (function() {
+// Create lookup table for `toString('hex')`
+// See: https://github.com/feross/buffer/issues/219
+var hexSliceLookupTable = (function () {
+  var alphabet = '0123456789abcdef'
+  var table = new Array(256)
+  for (var i = 0; i < 16; ++i) {
+    var i16 = i * 16
+    for (var j = 0; j < 16; ++j) {
+      table[i16 + j] = alphabet[i] + alphabet[j]
+    }
+  }
+  return table
+})()
+
+}).call(this,require("buffer").Buffer)
+},{"base64-js":10,"buffer":11,"ieee754":14}],12:[function(require,module,exports){
 'use strict';
 
-function _instanceof(obj, type) {
-  return type != null && obj instanceof type;
-}
-
-var nativeMap;
-try {
-  nativeMap = Map;
-} catch(_) {
-  // maybe a reference error because no `Map`. Give it a dummy value that no
-  // value will ever be an instanceof.
-  nativeMap = function() {};
-}
-
-var nativeSet;
-try {
-  nativeSet = Set;
-} catch(_) {
-  nativeSet = function() {};
-}
-
-var nativePromise;
-try {
-  nativePromise = Promise;
-} catch(_) {
-  nativePromise = function() {};
-}
-
 /**
- * Clones (copies) an Object using deep copying.
- *
- * This function supports circular references by default, but if you are certain
- * there are no circular references in your object, you can save some CPU time
- * by calling clone(obj, false).
- *
- * Caution: if `circular` is false and `parent` contains circular references,
- * your program may enter an infinite loop and crash.
- *
- * @param `parent` - the object to be cloned
- * @param `circular` - set to true if the object to be cloned may contain
- *    circular references. (optional - true by default)
- * @param `depth` - set to a number if the object is only to be cloned to
- *    a particular depth. (optional - defaults to Infinity)
- * @param `prototype` - sets the prototype to be used when cloning an object.
- *    (optional - defaults to parent prototype).
- * @param `includeNonEnumerable` - set to true if the non-enumerable properties
- *    should be cloned as well. Non-enumerable properties on the prototype
- *    chain will be ignored. (optional - false by default)
-*/
-function clone(parent, circular, depth, prototype, includeNonEnumerable) {
-  if (typeof circular === 'object') {
-    depth = circular.depth;
-    prototype = circular.prototype;
-    includeNonEnumerable = circular.includeNonEnumerable;
-    circular = circular.circular;
-  }
-  // maintain two arrays for circular references, where corresponding parents
-  // and children have the same index
-  var allParents = [];
-  var allChildren = [];
-
-  var useBuffer = typeof Buffer != 'undefined';
-
-  if (typeof circular == 'undefined')
-    circular = true;
-
-  if (typeof depth == 'undefined')
-    depth = Infinity;
-
-  // recurse this function so we don't reset allParents and allChildren
-  function _clone(parent, depth) {
-    // cloning null always returns null
-    if (parent === null)
-      return null;
-
-    if (depth === 0)
-      return parent;
-
-    var child;
-    var proto;
-    if (typeof parent != 'object') {
-      return parent;
-    }
-
-    if (_instanceof(parent, nativeMap)) {
-      child = new nativeMap();
-    } else if (_instanceof(parent, nativeSet)) {
-      child = new nativeSet();
-    } else if (_instanceof(parent, nativePromise)) {
-      child = new nativePromise(function (resolve, reject) {
-        parent.then(function(value) {
-          resolve(_clone(value, depth - 1));
-        }, function(err) {
-          reject(_clone(err, depth - 1));
-        });
-      });
-    } else if (clone.__isArray(parent)) {
-      child = [];
-    } else if (clone.__isRegExp(parent)) {
-      child = new RegExp(parent.source, __getRegExpFlags(parent));
-      if (parent.lastIndex) child.lastIndex = parent.lastIndex;
-    } else if (clone.__isDate(parent)) {
-      child = new Date(parent.getTime());
-    } else if (useBuffer && Buffer.isBuffer(parent)) {
-      child = new Buffer(parent.length);
-      parent.copy(child);
-      return child;
-    } else if (_instanceof(parent, Error)) {
-      child = Object.create(parent);
-    } else {
-      if (typeof prototype == 'undefined') {
-        proto = Object.getPrototypeOf(parent);
-        child = Object.create(proto);
-      }
-      else {
-        child = Object.create(prototype);
-        proto = prototype;
-      }
-    }
-
-    if (circular) {
-      var index = allParents.indexOf(parent);
-
-      if (index != -1) {
-        return allChildren[index];
-      }
-      allParents.push(parent);
-      allChildren.push(child);
-    }
-
-    if (_instanceof(parent, nativeMap)) {
-      parent.forEach(function(value, key) {
-        var keyChild = _clone(key, depth - 1);
-        var valueChild = _clone(value, depth - 1);
-        child.set(keyChild, valueChild);
-      });
-    }
-    if (_instanceof(parent, nativeSet)) {
-      parent.forEach(function(value) {
-        var entryChild = _clone(value, depth - 1);
-        child.add(entryChild);
-      });
-    }
-
-    for (var i in parent) {
-      var attrs;
-      if (proto) {
-        attrs = Object.getOwnPropertyDescriptor(proto, i);
-      }
-
-      if (attrs && attrs.set == null) {
-        continue;
-      }
-      child[i] = _clone(parent[i], depth - 1);
-    }
-
-    if (Object.getOwnPropertySymbols) {
-      var symbols = Object.getOwnPropertySymbols(parent);
-      for (var i = 0; i < symbols.length; i++) {
-        // Don't need to worry about cloning a symbol because it is a primitive,
-        // like a number or string.
-        var symbol = symbols[i];
-        var descriptor = Object.getOwnPropertyDescriptor(parent, symbol);
-        if (descriptor && !descriptor.enumerable && !includeNonEnumerable) {
-          continue;
-        }
-        child[symbol] = _clone(parent[symbol], depth - 1);
-        if (!descriptor.enumerable) {
-          Object.defineProperty(child, symbol, {
-            enumerable: false
-          });
-        }
-      }
-    }
-
-    if (includeNonEnumerable) {
-      var allPropertyNames = Object.getOwnPropertyNames(parent);
-      for (var i = 0; i < allPropertyNames.length; i++) {
-        var propertyName = allPropertyNames[i];
-        var descriptor = Object.getOwnPropertyDescriptor(parent, propertyName);
-        if (descriptor && descriptor.enumerable) {
-          continue;
-        }
-        child[propertyName] = _clone(parent[propertyName], depth - 1);
-        Object.defineProperty(child, propertyName, {
-          enumerable: false
-        });
-      }
-    }
-
-    return child;
-  }
-
-  return _clone(parent, depth);
-}
-
-/**
- * Simple flat clone using prototype, accepts only objects, usefull for property
- * override on FLAT configuration object (no nested props).
- *
- * USE WITH CAUTION! This may not behave as you wish if you do not know how this
- * works.
- */
-clone.clonePrototype = function clonePrototype(parent) {
-  if (parent === null)
-    return null;
-
-  var c = function () {};
-  c.prototype = parent;
-  return new c();
-};
-
-// private utility functions
-
-function __objToStr(o) {
-  return Object.prototype.toString.call(o);
-}
-clone.__objToStr = __objToStr;
-
-function __isDate(o) {
-  return typeof o === 'object' && __objToStr(o) === '[object Date]';
-}
-clone.__isDate = __isDate;
-
-function __isArray(o) {
-  return typeof o === 'object' && __objToStr(o) === '[object Array]';
-}
-clone.__isArray = __isArray;
-
-function __isRegExp(o) {
-  return typeof o === 'object' && __objToStr(o) === '[object RegExp]';
-}
-clone.__isRegExp = __isRegExp;
-
-function __getRegExpFlags(re) {
-  var flags = '';
-  if (re.global) flags += 'g';
-  if (re.ignoreCase) flags += 'i';
-  if (re.multiline) flags += 'm';
-  return flags;
-}
-clone.__getRegExpFlags = __getRegExpFlags;
-
-return clone;
-})();
-
-if (typeof module === 'object' && module.exports) {
-  module.exports = clone;
-}
-
-}).call(this,_dereq_("buffer").Buffer)
-},{"buffer":9}],11:[function(_dereq_,module,exports){
-
-/**
- * Expose `Emitter`.
+ * Module dependenices
  */
 
-if (typeof module !== 'undefined') {
-  module.exports = Emitter;
-}
+const clone = require('shallow-clone');
+const typeOf = require('kind-of');
+const isPlainObject = require('is-plain-object');
 
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
-
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks['$' + event] = this._callbacks['$' + event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  function on() {
-    this.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks['$' + event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks['$' + event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
+function cloneDeep(val, instanceClone) {
+  switch (typeOf(val)) {
+    case 'object':
+      return cloneObjectDeep(val, instanceClone);
+    case 'array':
+      return cloneArrayDeep(val, instanceClone);
+    default: {
+      return clone(val);
     }
   }
-  return this;
-};
+}
+
+function cloneObjectDeep(val, instanceClone) {
+  if (typeof instanceClone === 'function') {
+    return instanceClone(val);
+  }
+  if (instanceClone || isPlainObject(val)) {
+    const res = new val.constructor();
+    for (let key in val) {
+      res[key] = cloneDeep(val[key], instanceClone);
+    }
+    return res;
+  }
+  return val;
+}
+
+function cloneArrayDeep(val, instanceClone) {
+  const res = new val.constructor(val.length);
+  for (let i = 0; i < val.length; i++) {
+    res[i] = cloneDeep(val[i], instanceClone);
+  }
+  return res;
+}
 
 /**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
+ * Expose `cloneDeep`
  */
 
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks['$' + event];
+module.exports = cloneDeep;
 
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
-    }
+},{"is-plain-object":15,"kind-of":17,"shallow-clone":26}],13:[function(require,module,exports){
+class ConsumableStream {
+  async next(timeout) {
+    let asyncIterator = this.createConsumer(timeout);
+    let result = await asyncIterator.next();
+    asyncIterator.return();
+    return result;
   }
 
-  return this;
-};
+  async once(timeout) {
+    let result = await this.next(timeout);
+    if (result.done) {
+      // If stream was ended, this function should never resolve.
+      await new Promise(() => {});
+    }
+    return result.value;
+  }
 
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
+  createConsumer() {
+    throw new TypeError('Method must be overriden by subclass');
+  }
 
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks['$' + event] || [];
-};
+  [Symbol.asyncIterator]() {
+    return this.createConsumer();
+  }
+}
 
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
+module.exports = ConsumableStream;
 
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
-};
-
-},{}],12:[function(_dereq_,module,exports){
+},{}],14:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -4226,7 +4558,191 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],13:[function(_dereq_,module,exports){
+},{}],15:[function(require,module,exports){
+/*!
+ * is-plain-object <https://github.com/jonschlinkert/is-plain-object>
+ *
+ * Copyright (c) 2014-2017, Jon Schlinkert.
+ * Released under the MIT License.
+ */
+
+'use strict';
+
+var isObject = require('isobject');
+
+function isObjectObject(o) {
+  return isObject(o) === true
+    && Object.prototype.toString.call(o) === '[object Object]';
+}
+
+module.exports = function isPlainObject(o) {
+  var ctor,prot;
+
+  if (isObjectObject(o) === false) return false;
+
+  // If has modified constructor
+  ctor = o.constructor;
+  if (typeof ctor !== 'function') return false;
+
+  // If has modified prototype
+  prot = ctor.prototype;
+  if (isObjectObject(prot) === false) return false;
+
+  // If constructor does not have an Object-specific method
+  if (prot.hasOwnProperty('isPrototypeOf') === false) {
+    return false;
+  }
+
+  // Most likely a plain Object
+  return true;
+};
+
+},{"isobject":16}],16:[function(require,module,exports){
+/*!
+ * isobject <https://github.com/jonschlinkert/isobject>
+ *
+ * Copyright (c) 2014-2017, Jon Schlinkert.
+ * Released under the MIT License.
+ */
+
+'use strict';
+
+module.exports = function isObject(val) {
+  return val != null && typeof val === 'object' && Array.isArray(val) === false;
+};
+
+},{}],17:[function(require,module,exports){
+var toString = Object.prototype.toString;
+
+module.exports = function kindOf(val) {
+  if (val === void 0) return 'undefined';
+  if (val === null) return 'null';
+
+  var type = typeof val;
+  if (type === 'boolean') return 'boolean';
+  if (type === 'string') return 'string';
+  if (type === 'number') return 'number';
+  if (type === 'symbol') return 'symbol';
+  if (type === 'function') {
+    return isGeneratorFn(val) ? 'generatorfunction' : 'function';
+  }
+
+  if (isArray(val)) return 'array';
+  if (isBuffer(val)) return 'buffer';
+  if (isArguments(val)) return 'arguments';
+  if (isDate(val)) return 'date';
+  if (isError(val)) return 'error';
+  if (isRegexp(val)) return 'regexp';
+
+  switch (ctorName(val)) {
+    case 'Symbol': return 'symbol';
+    case 'Promise': return 'promise';
+
+    // Set, Map, WeakSet, WeakMap
+    case 'WeakMap': return 'weakmap';
+    case 'WeakSet': return 'weakset';
+    case 'Map': return 'map';
+    case 'Set': return 'set';
+
+    // 8-bit typed arrays
+    case 'Int8Array': return 'int8array';
+    case 'Uint8Array': return 'uint8array';
+    case 'Uint8ClampedArray': return 'uint8clampedarray';
+
+    // 16-bit typed arrays
+    case 'Int16Array': return 'int16array';
+    case 'Uint16Array': return 'uint16array';
+
+    // 32-bit typed arrays
+    case 'Int32Array': return 'int32array';
+    case 'Uint32Array': return 'uint32array';
+    case 'Float32Array': return 'float32array';
+    case 'Float64Array': return 'float64array';
+  }
+
+  if (isGeneratorObj(val)) {
+    return 'generator';
+  }
+
+  // Non-plain objects
+  type = toString.call(val);
+  switch (type) {
+    case '[object Object]': return 'object';
+    // iterators
+    case '[object Map Iterator]': return 'mapiterator';
+    case '[object Set Iterator]': return 'setiterator';
+    case '[object String Iterator]': return 'stringiterator';
+    case '[object Array Iterator]': return 'arrayiterator';
+  }
+
+  // other
+  return type.slice(8, -1).toLowerCase().replace(/\s/g, '');
+};
+
+function ctorName(val) {
+  return typeof val.constructor === 'function' ? val.constructor.name : null;
+}
+
+function isArray(val) {
+  if (Array.isArray) return Array.isArray(val);
+  return val instanceof Array;
+}
+
+function isError(val) {
+  return val instanceof Error || (typeof val.message === 'string' && val.constructor && typeof val.constructor.stackTraceLimit === 'number');
+}
+
+function isDate(val) {
+  if (val instanceof Date) return true;
+  return typeof val.toDateString === 'function'
+    && typeof val.getDate === 'function'
+    && typeof val.setDate === 'function';
+}
+
+function isRegexp(val) {
+  if (val instanceof RegExp) return true;
+  return typeof val.flags === 'string'
+    && typeof val.ignoreCase === 'boolean'
+    && typeof val.multiline === 'boolean'
+    && typeof val.global === 'boolean';
+}
+
+function isGeneratorFn(name, val) {
+  return ctorName(name) === 'GeneratorFunction';
+}
+
+function isGeneratorObj(val) {
+  return typeof val.throw === 'function'
+    && typeof val.return === 'function'
+    && typeof val.next === 'function';
+}
+
+function isArguments(val) {
+  try {
+    if (typeof val.length === 'number' && typeof val.callee === 'function') {
+      return true;
+    }
+  } catch (err) {
+    if (err.message.indexOf('callee') !== -1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * If you need to support Safari 5-7 (8-10 yr-old browser),
+ * take a look at https://github.com/feross/is-buffer
+ */
+
+function isBuffer(val) {
+  if (val.constructor && typeof val.constructor.isBuffer === 'function') {
+    return val.constructor.isBuffer(val);
+  }
+  return false;
+}
+
+},{}],18:[function(require,module,exports){
 'use strict';
 
 /**
@@ -4614,12 +5130,12 @@ ListItemPrototype.append = function (item) {
 
 module.exports = List;
 
-},{}],14:[function(_dereq_,module,exports){
+},{}],19:[function(require,module,exports){
 'use strict';
 
-module.exports = _dereq_('./_source/linked-list.js');
+module.exports = require('./_source/linked-list.js');
 
-},{"./_source/linked-list.js":13}],15:[function(_dereq_,module,exports){
+},{"./_source/linked-list.js":18}],20:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4705,7 +5221,7 @@ var isArray = Array.isArray || function (xs) {
   return Object.prototype.toString.call(xs) === '[object Array]';
 };
 
-},{}],16:[function(_dereq_,module,exports){
+},{}],21:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4792,85 +5308,13 @@ var objectKeys = Object.keys || function (obj) {
   return res;
 };
 
-},{}],17:[function(_dereq_,module,exports){
+},{}],22:[function(require,module,exports){
 'use strict';
 
-exports.decode = exports.parse = _dereq_('./decode');
-exports.encode = exports.stringify = _dereq_('./encode');
+exports.decode = exports.parse = require('./decode');
+exports.encode = exports.stringify = require('./encode');
 
-},{"./decode":15,"./encode":16}],18:[function(_dereq_,module,exports){
-var Emitter = _dereq_('component-emitter');
-
-var SCChannel = function (name, client, options) {
-  var self = this;
-
-  Emitter.call(this);
-
-  this.PENDING = 'pending';
-  this.SUBSCRIBED = 'subscribed';
-  this.UNSUBSCRIBED = 'unsubscribed';
-
-  this.name = name;
-  this.state = this.UNSUBSCRIBED;
-  this.client = client;
-
-  this.options = options || {};
-  this.setOptions(this.options);
-};
-
-SCChannel.prototype = Object.create(Emitter.prototype);
-
-SCChannel.prototype.setOptions = function (options) {
-  if (!options) {
-    options = {};
-  }
-  this.waitForAuth = options.waitForAuth || false;
-  this.batch = options.batch || false;
-
-  if (options.data !== undefined) {
-    this.data = options.data;
-  }
-};
-
-SCChannel.prototype.getState = function () {
-  return this.state;
-};
-
-SCChannel.prototype.subscribe = function (options) {
-  this.client.subscribe(this.name, options);
-};
-
-SCChannel.prototype.unsubscribe = function () {
-  this.client.unsubscribe(this.name);
-};
-
-SCChannel.prototype.isSubscribed = function (includePending) {
-  return this.client.isSubscribed(this.name, includePending);
-};
-
-SCChannel.prototype.publish = function (data, callback) {
-  this.client.publish(this.name, data, callback);
-};
-
-SCChannel.prototype.watch = function (handler) {
-  this.client.watch(this.name, handler);
-};
-
-SCChannel.prototype.unwatch = function (handler) {
-  this.client.unwatch(this.name, handler);
-};
-
-SCChannel.prototype.watchers = function () {
-  return this.client.watchers(this.name);
-};
-
-SCChannel.prototype.destroy = function () {
-  this.client.destroyChannel(this.name);
-};
-
-module.exports.SCChannel = SCChannel;
-
-},{"component-emitter":11}],19:[function(_dereq_,module,exports){
+},{"./decode":20,"./encode":21}],23:[function(require,module,exports){
 // Based on https://github.com/dscape/cycle/blob/master/cycle.js
 
 module.exports = function decycle(object) {
@@ -4951,8 +5395,8 @@ module.exports = function decycle(object) {
     }(object, '$'));
 };
 
-},{}],20:[function(_dereq_,module,exports){
-var decycle = _dereq_('./decycle');
+},{}],24:[function(require,module,exports){
+var decycle = require('./decycle');
 
 var isStrict = (function () { return !this; })();
 
@@ -5293,7 +5737,7 @@ module.exports.hydrateError = function hydrateError(error) {
 
 module.exports.decycle = decycle;
 
-},{"./decycle":19}],21:[function(_dereq_,module,exports){
+},{"./decycle":23}],25:[function(require,module,exports){
 (function (global){
 var base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 var validJSONStartRegex = /^[ \n\r\t]*[{\[]/;
@@ -5391,9 +5835,303 @@ module.exports.encode = function (object) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],22:[function(_dereq_,module,exports){
-var v1 = _dereq_('./v1');
-var v4 = _dereq_('./v4');
+},{}],26:[function(require,module,exports){
+(function (Buffer){
+/*!
+ * shallow-clone <https://github.com/jonschlinkert/shallow-clone>
+ *
+ * Copyright (c) 2015-present, Jon Schlinkert.
+ * Released under the MIT License.
+ */
+
+'use strict';
+
+const valueOf = Symbol.prototype.valueOf;
+const typeOf = require('kind-of');
+
+function clone(val, deep) {
+  switch (typeOf(val)) {
+    case 'array':
+      return val.slice();
+    case 'object':
+      return Object.assign({}, val);
+    case 'date':
+      return new val.constructor(Number(val));
+    case 'map':
+      return new Map(val);
+    case 'set':
+      return new Set(val);
+    case 'buffer':
+      return cloneBuffer(val);
+    case 'symbol':
+      return cloneSymbol(val);
+    case 'arraybuffer':
+      return cloneArrayBuffer(val);
+    case 'float32array':
+    case 'float64array':
+    case 'int16array':
+    case 'int32array':
+    case 'int8array':
+    case 'uint16array':
+    case 'uint32array':
+    case 'uint8clampedarray':
+    case 'uint8array':
+      return cloneTypedArray(val);
+    case 'regexp':
+      return cloneRegExp(val);
+    case 'error':
+      return Object.create(val);
+    default: {
+      return val;
+    }
+  }
+}
+
+function cloneRegExp(val) {
+  const flags = val.flags !== void 0 ? val.flags : (/\w+$/.exec(val) || void 0);
+  const re = new val.constructor(val.source, flags);
+  re.lastIndex = val.lastIndex;
+  return re;
+}
+
+function cloneArrayBuffer(val) {
+  const res = new val.constructor(val.byteLength);
+  new Uint8Array(res).set(new Uint8Array(val));
+  return res;
+}
+
+function cloneTypedArray(val, deep) {
+  return new val.constructor(val.buffer, val.byteOffset, val.length);
+}
+
+function cloneBuffer(val) {
+  const len = val.length;
+  const buf = Buffer.allocUnsafe ? Buffer.allocUnsafe(len) : Buffer.from(len);
+  val.copy(buf);
+  return buf;
+}
+
+function cloneSymbol(val) {
+  return valueOf ? Object(valueOf.call(val)) : {};
+}
+
+/**
+ * Expose `clone`
+ */
+
+module.exports = clone;
+
+}).call(this,require("buffer").Buffer)
+},{"buffer":11,"kind-of":17}],27:[function(require,module,exports){
+const ConsumableStream = require('consumable-stream');
+
+class DemuxedConsumableStream extends ConsumableStream {
+  constructor(streamDemux, name) {
+    super();
+    this.name = name;
+    this._streamDemux = streamDemux;
+  }
+
+  createConsumer(timeout) {
+    return this._streamDemux.createConsumer(this.name, timeout);
+  }
+}
+
+module.exports = DemuxedConsumableStream;
+
+},{"consumable-stream":13}],28:[function(require,module,exports){
+const WritableConsumableStream = require('writable-consumable-stream');
+const DemuxedConsumableStream = require('./demuxed-consumable-stream');
+
+class StreamDemux {
+  constructor() {
+    this._mainStream = new WritableConsumableStream();
+  }
+
+  write(streamName, value) {
+    this._mainStream.write({
+      stream: streamName,
+      data: {
+        value,
+        done: false
+      }
+    });
+  }
+
+  close(streamName, value) {
+    this._mainStream.write({
+      stream: streamName,
+      data: {
+        value,
+        done: true
+      }
+    });
+  }
+
+  closeAll(value) {
+    this._mainStream.close(value);
+  }
+
+  writeToConsumer(consumerId, value) {
+    this._mainStream.writeToConsumer(consumerId, {
+      consumerId,
+      data: {
+        value,
+        done: false
+      }
+    });
+  }
+
+  closeConsumer(consumerId, value) {
+    this._mainStream.closeConsumer(consumerId, {
+      consumerId,
+      data: {
+        value,
+        done: true
+      }
+    });
+  }
+
+  getConsumerStats(consumerId) {
+    return this._mainStream.getConsumerStats(consumerId);
+  }
+
+  getConsumerStatsList(streamName) {
+    let consumerList = this._mainStream.getConsumerStatsList();
+    return consumerList.filter((consumerStats) => {
+      return consumerStats.stream === streamName;
+    });
+  }
+
+  getConsumerStatsListAll() {
+    return this._mainStream.getConsumerStatsList();
+  }
+
+  kill(streamName, value) {
+    let consumerList = this.getConsumerStatsList(streamName);
+    let len = consumerList.length;
+    for (let i = 0; i < len; i++) {
+      this.killConsumer(consumerList[i].id, value);
+    }
+  }
+
+  killAll(value) {
+    this._mainStream.kill(value);
+  }
+
+  killConsumer(consumerId, value) {
+    this._mainStream.killConsumer(consumerId, value);
+  }
+
+  getBackpressure(streamName) {
+    let consumerList = this.getConsumerStatsList(streamName);
+    let len = consumerList.length;
+
+    let maxBackpressure = 0;
+    for (let i = 0; i < len; i++) {
+      let consumer = consumerList[i];
+      if (consumer.backpressure > maxBackpressure) {
+        maxBackpressure = consumer.backpressure;
+      }
+    }
+    return maxBackpressure;
+  }
+
+  getBackpressureAll() {
+    return this._mainStream.getBackpressure();
+  }
+
+  getConsumerBackpressure(consumerId) {
+    return this._mainStream.getConsumerBackpressure(consumerId);
+  }
+
+  hasConsumer(streamName, consumerId) {
+    let consumerStats = this._mainStream.getConsumerStats(consumerId);
+    return !!consumerStats && consumerStats.stream === streamName;
+  }
+
+  hasConsumerAll(consumerId) {
+    return this._mainStream.hasConsumer(consumerId);
+  }
+
+  createConsumer(streamName, timeout) {
+    let mainStreamConsumer = this._mainStream.createConsumer(timeout);
+
+    let consumerNext = mainStreamConsumer.next;
+    mainStreamConsumer.next = async function () {
+      while (true) {
+        let packet = await consumerNext.apply(this, arguments);
+        if (packet.value) {
+          if (
+            packet.value.stream === streamName ||
+            packet.value.consumerId === this.id
+          ) {
+            if (packet.value.data.done) {
+              this.return();
+            }
+            return packet.value.data;
+          }
+        }
+        if (packet.done) {
+          return packet;
+        }
+      }
+    };
+
+    let consumerGetStats = mainStreamConsumer.getStats;
+    mainStreamConsumer.getStats = function () {
+      let stats = consumerGetStats.apply(this, arguments);
+      stats.stream = streamName;
+      return stats;
+    };
+
+    let consumerApplyBackpressure = mainStreamConsumer.applyBackpressure;
+    mainStreamConsumer.applyBackpressure = function (packet) {
+      if (packet.value) {
+        if (
+          packet.value.stream === streamName ||
+          packet.value.consumerId === this.id
+        ) {
+          consumerApplyBackpressure.apply(this, arguments);
+
+          return;
+        }
+      }
+      if (packet.done) {
+        consumerApplyBackpressure.apply(this, arguments);
+      }
+    };
+
+    let consumerReleaseBackpressure = mainStreamConsumer.releaseBackpressure;
+    mainStreamConsumer.releaseBackpressure = function (packet) {
+      if (packet.value) {
+        if (
+          packet.value.stream === streamName ||
+          packet.value.consumerId === this.id
+        ) {
+          consumerReleaseBackpressure.apply(this, arguments);
+
+          return;
+        }
+      }
+      if (packet.done) {
+        consumerReleaseBackpressure.apply(this, arguments);
+      }
+    };
+
+    return mainStreamConsumer;
+  }
+
+  stream(streamName) {
+    return new DemuxedConsumableStream(this, streamName);
+  }
+}
+
+module.exports = StreamDemux;
+
+},{"./demuxed-consumable-stream":27,"writable-consumable-stream":35}],29:[function(require,module,exports){
+var v1 = require('./v1');
+var v4 = require('./v4');
 
 var uuid = v4;
 uuid.v1 = v1;
@@ -5401,7 +6139,7 @@ uuid.v4 = v4;
 
 module.exports = uuid;
 
-},{"./v1":25,"./v4":26}],23:[function(_dereq_,module,exports){
+},{"./v1":32,"./v4":33}],30:[function(require,module,exports){
 /**
  * Convert array of 16 byte values to UUID string format of the form:
  * XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
@@ -5414,27 +6152,32 @@ for (var i = 0; i < 256; ++i) {
 function bytesToUuid(buf, offset) {
   var i = offset || 0;
   var bth = byteToHex;
-  return bth[buf[i++]] + bth[buf[i++]] +
-          bth[buf[i++]] + bth[buf[i++]] + '-' +
-          bth[buf[i++]] + bth[buf[i++]] + '-' +
-          bth[buf[i++]] + bth[buf[i++]] + '-' +
-          bth[buf[i++]] + bth[buf[i++]] + '-' +
-          bth[buf[i++]] + bth[buf[i++]] +
-          bth[buf[i++]] + bth[buf[i++]] +
-          bth[buf[i++]] + bth[buf[i++]];
+  // join used to fix memory issue caused by concatenation: https://bugs.chromium.org/p/v8/issues/detail?id=3175#c4
+  return ([
+    bth[buf[i++]], bth[buf[i++]],
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]],
+    bth[buf[i++]], bth[buf[i++]],
+    bth[buf[i++]], bth[buf[i++]]
+  ]).join('');
 }
 
 module.exports = bytesToUuid;
 
-},{}],24:[function(_dereq_,module,exports){
+},{}],31:[function(require,module,exports){
 // Unique ID creation requires a high quality random # generator.  In the
 // browser this is a little complicated due to unknown quality of Math.random()
 // and inconsistent support for the `crypto` API.  We do the best we can via
 // feature-detection
 
-// getRandomValues needs to be invoked in a context where "this" is a Crypto implementation.
-var getRandomValues = (typeof(crypto) != 'undefined' && crypto.getRandomValues.bind(crypto)) ||
-                      (typeof(msCrypto) != 'undefined' && msCrypto.getRandomValues.bind(msCrypto));
+// getRandomValues needs to be invoked in a context where "this" is a Crypto
+// implementation. Also, find the complete implementation of crypto on IE11.
+var getRandomValues = (typeof(crypto) != 'undefined' && crypto.getRandomValues && crypto.getRandomValues.bind(crypto)) ||
+                      (typeof(msCrypto) != 'undefined' && typeof window.msCrypto.getRandomValues == 'function' && msCrypto.getRandomValues.bind(msCrypto));
+
 if (getRandomValues) {
   // WHATWG crypto RNG - http://wiki.whatwg.org/wiki/Crypto
   var rnds8 = new Uint8Array(16); // eslint-disable-line no-undef
@@ -5460,9 +6203,9 @@ if (getRandomValues) {
   };
 }
 
-},{}],25:[function(_dereq_,module,exports){
-var rng = _dereq_('./lib/rng');
-var bytesToUuid = _dereq_('./lib/bytesToUuid');
+},{}],32:[function(require,module,exports){
+var rng = require('./lib/rng');
+var bytesToUuid = require('./lib/bytesToUuid');
 
 // **`v1()` - Generate time-based UUID**
 //
@@ -5476,7 +6219,7 @@ var _clockseq;
 var _lastMSecs = 0;
 var _lastNSecs = 0;
 
-// See https://github.com/broofa/node-uuid for API details
+// See https://github.com/uuidjs/uuid for API details
 function v1(options, buf, offset) {
   var i = buf && offset || 0;
   var b = buf || [];
@@ -5571,9 +6314,9 @@ function v1(options, buf, offset) {
 
 module.exports = v1;
 
-},{"./lib/bytesToUuid":23,"./lib/rng":24}],26:[function(_dereq_,module,exports){
-var rng = _dereq_('./lib/rng');
-var bytesToUuid = _dereq_('./lib/bytesToUuid');
+},{"./lib/bytesToUuid":30,"./lib/rng":31}],33:[function(require,module,exports){
+var rng = require('./lib/rng');
+var bytesToUuid = require('./lib/bytesToUuid');
 
 function v4(options, buf, offset) {
   var i = buf && offset || 0;
@@ -5602,5 +6345,303 @@ function v4(options, buf, offset) {
 
 module.exports = v4;
 
-},{"./lib/bytesToUuid":23,"./lib/rng":24}]},{},[1])(1)
+},{"./lib/bytesToUuid":30,"./lib/rng":31}],34:[function(require,module,exports){
+class Consumer {
+  constructor(stream, id, startNode, timeout) {
+    this.id = id;
+    this._backpressure = 0;
+    this.stream = stream;
+    this.currentNode = startNode;
+    this.timeout = timeout;
+    this.isAlive = true;
+    this.stream.setConsumer(this.id, this);
+  }
+
+  getStats() {
+    let stats = {
+      id: this.id,
+      backpressure: this._backpressure
+    };
+    if (this.timeout != null) {
+      stats.timeout = this.timeout;
+    }
+    return stats;
+  }
+
+  _resetBackpressure() {
+    this._backpressure = 0;
+  }
+
+  applyBackpressure(packet) {
+    this._backpressure++;
+  }
+
+  releaseBackpressure(packet) {
+    this._backpressure--;
+  }
+
+  getBackpressure() {
+    return this._backpressure;
+  }
+
+  write(packet) {
+    if (this._timeoutId !== undefined) {
+      clearTimeout(this._timeoutId);
+      delete this._timeoutId;
+    }
+    this.applyBackpressure(packet);
+    if (this._resolve) {
+      this._resolve();
+      delete this._resolve;
+    }
+  }
+
+  kill(value) {
+    if (this._timeoutId !== undefined) {
+      clearTimeout(this._timeoutId);
+      delete this._timeoutId;
+    }
+    this._killPacket = {value, done: true};
+    this._destroy();
+
+    if (this._resolve) {
+      this._resolve();
+      delete this._resolve;
+    }
+  }
+
+  _destroy() {
+    this.isAlive = false;
+    this._resetBackpressure();
+    this.stream.removeConsumer(this.id);
+  }
+
+  async _waitForNextItem(timeout) {
+    return new Promise((resolve, reject) => {
+      this._resolve = resolve;
+      let timeoutId;
+      if (timeout !== undefined) {
+        // Create the error object in the outer scope in order
+        // to get the full stack trace.
+        let error = new Error('Stream consumer iteration timed out');
+        (async () => {
+          let delay = wait(timeout);
+          timeoutId = delay.timeoutId;
+          await delay.promise;
+          error.name = 'TimeoutError';
+          delete this._resolve;
+          reject(error);
+        })();
+      }
+      this._timeoutId = timeoutId;
+    });
+  }
+
+  async next() {
+    this.stream.setConsumer(this.id, this);
+
+    while (true) {
+      if (!this.currentNode.next) {
+        try {
+          await this._waitForNextItem(this.timeout);
+        } catch (error) {
+          this._destroy();
+          throw error;
+        }
+      }
+      if (this._killPacket) {
+        this._destroy();
+        let killPacket = this._killPacket;
+        delete this._killPacket;
+
+        return killPacket;
+      }
+
+      this.currentNode = this.currentNode.next;
+      this.releaseBackpressure(this.currentNode.data);
+
+      if (this.currentNode.consumerId && this.currentNode.consumerId !== this.id) {
+        continue;
+      }
+
+      if (this.currentNode.data.done) {
+        this._destroy();
+      }
+
+      return this.currentNode.data;
+    }
+  }
+
+  return() {
+    delete this.currentNode;
+    this._destroy();
+    return {};
+  }
+
+  [Symbol.asyncIterator]() {
+    return this;
+  }
+}
+
+function wait(timeout) {
+  let timeoutId;
+  let promise = new Promise((resolve) => {
+    timeoutId = setTimeout(resolve, timeout);
+  });
+  return {timeoutId, promise};
+}
+
+module.exports = Consumer;
+
+},{}],35:[function(require,module,exports){
+const ConsumableStream = require('consumable-stream');
+const Consumer = require('./consumer');
+
+class WritableConsumableStream extends ConsumableStream {
+  constructor() {
+    super();
+    this.nextConsumerId = 1;
+    this._consumers = {};
+
+    // Tail node of a singly linked list.
+    this._tailNode = {
+      next: null,
+      data: {
+        value: undefined,
+        done: false
+      }
+    };
+  }
+
+  _write(value, done, consumerId) {
+    let dataNode = {
+      data: {value, done},
+      next: null
+    };
+    if (consumerId) {
+      dataNode.consumerId = consumerId;
+    }
+    this._tailNode.next = dataNode;
+    this._tailNode = dataNode;
+
+    let consumerList = Object.values(this._consumers);
+    let len = consumerList.length;
+
+    for (let i = 0; i < len; i++) {
+      let consumer = consumerList[i];
+      consumer.write(dataNode.data);
+    }
+  }
+
+  write(value) {
+    this._write(value, false);
+  }
+
+  close(value) {
+    this._write(value, true);
+  }
+
+  writeToConsumer(consumerId, value) {
+    this._write(value, false, consumerId);
+  }
+
+  closeConsumer(consumerId, value) {
+    this._write(value, true, consumerId);
+  }
+
+  kill(value) {
+    let consumerIdList = Object.keys(this._consumers);
+    let len = consumerIdList.length;
+    for (let i = 0; i < len; i++) {
+      this.killConsumer(consumerIdList[i], value);
+    }
+  }
+
+  killConsumer(consumerId, value) {
+    let consumer = this._consumers[consumerId];
+    if (!consumer) {
+      return;
+    }
+    consumer.kill(value);
+  }
+
+  getBackpressure() {
+    let consumerList = Object.values(this._consumers);
+    let len = consumerList.length;
+
+    let maxBackpressure = 0;
+    for (let i = 0; i < len; i++) {
+      let consumer = consumerList[i];
+      let backpressure = consumer.getBackpressure();
+      if (backpressure > maxBackpressure) {
+        maxBackpressure = backpressure;
+      }
+    }
+    return maxBackpressure;
+  }
+
+  getConsumerBackpressure(consumerId) {
+    let consumer = this._consumers[consumerId];
+    if (consumer) {
+      return consumer.getBackpressure();
+    }
+    return 0;
+  }
+
+  hasConsumer(consumerId) {
+    return !!this._consumers[consumerId];
+  }
+
+  setConsumer(consumerId, consumer) {
+    this._consumers[consumerId] = consumer;
+    if (!consumer.currentNode) {
+      consumer.currentNode = this._tailNode;
+    }
+  }
+
+  removeConsumer(consumerId) {
+    delete this._consumers[consumerId];
+  }
+
+  getConsumerStats(consumerId) {
+    let consumer = this._consumers[consumerId];
+    if (consumer) {
+      return consumer.getStats();
+    }
+    return undefined;
+  }
+
+  getConsumerStatsList() {
+    let consumerStats = [];
+    let consumerList = Object.values(this._consumers);
+    let len = consumerList.length;
+    for (let i = 0; i < len; i++) {
+      let consumer = consumerList[i];
+      consumerStats.push(consumer.getStats());
+    }
+    return consumerStats;
+  }
+
+  createConsumer(timeout) {
+    return new Consumer(this, this.nextConsumerId++, this._tailNode, timeout);
+  }
+}
+
+module.exports = WritableConsumableStream;
+
+},{"./consumer":34,"consumable-stream":13}],"socketcluster-client":[function(require,module,exports){
+const AGClientSocket = require('./lib/clientsocket');
+const factory = require('./lib/factory');
+const version = '16.0.1';
+
+module.exports.factory = factory;
+module.exports.AGClientSocket = AGClientSocket;
+
+module.exports.create = function (options) {
+  return factory.create({...options, version});
+};
+
+module.exports.version = version;
+
+},{"./lib/clientsocket":2,"./lib/factory":3}]},{},["socketcluster-client"])("socketcluster-client")
 });

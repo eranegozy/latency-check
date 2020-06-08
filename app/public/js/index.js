@@ -1,14 +1,14 @@
-const num = Math.floor(Math.random()*1000000);
+// const num = Math.floor(Math.random()*1000000);
 const audio_filename = 'audio/chirp.wav';
 const nav = {
-    num: num,
+    // num: num,
     codename: navigator.appCodeName,
     name: navigator.appName,
     version: navigator.appVersion,
     platform: navigator.platform,
     ua: navigator.userAgent
 };
-document.getElementById('id_num').innerHTML += num;
+
 
 var xhr = new XMLHttpRequest();
 xhr.open("POST", '/ua');
@@ -72,34 +72,58 @@ playButton.addEventListener('click', function() {
 const options = {
     // secure: true,
     // hostname: 'localhost',
-    port: 8000,
+    port: 8000
     // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
 };
 
-const socket = socketCluster.create(options);
+const socket = socketClusterClient.create(options);
 
-var recieved_play = socket.subscribe('play');
+(async() => {
+    let recieved_play = socket.subscribe('play');
+    // Send time and ID number to operator
+    for await (let sound of recieved_play) {
+        console.log(sound);
+        let now = Date.now();
+        playSound();
+        socket.publish('send_time', {time: now, id: num});
+    }
+})();
 
-// Send time and ID number to operator
-recieved_play.watch(function (sound){
-    console.log(sound);
-    let now = Date.now();
-    playSound();
-    socket.publish('send_time', {time: now, id: num});
-});
+(async() => {
+    // Add errors on page
+    for await (let err of socket.listener('error')) {
+        // socket.publish('removeButton', {id:num, err:err});
+        console.error(err);
+        document.getElementById('e_msg').innerHTML += err + '<br>';
+        document.getElementById('e_msg').innerHTML += "refresh the page <br>";   
+    }
+})();
 
-// Add errors on page
-socket.on('error', function (err) {
-    console.error(err);
-    document.getElementById('e_msg').innerHTML += err + '<br>';
-    document.getElementById('e_msg').innerHTML += "refresh the page <br>";
+(async() => {
+    for await (let data of socket.listener('connect')) {
+        console.log('Socket is connected');
+        document.getElementById('e_msg').innerHTML = "";
+        document.getElementById("id_num") = `#${socket.id}`;
+    }
+})();
 
-});
+(async() => {
+    for await (let channel of socket.listener('subscribe')) {
+        console.log(`Socket is subscribed to ${channel.channel}`);
+    }
+})();
 
-socket.on('connect', function () {
-    console.log('Socket is connected');
-});
+(async() => {
+    for await (let data of socket.listener('disconnect')){
+        console.log("help Im gone now");
+        socket.transmitPublish('removeButton');
+    }
+})();
 
-socket.on('subscribe', function (channelName) {
-    console.log(`Socket is subscribed to ${channelName}`);
-});
+(async () => {
+    let connected = socket.subscribe("connected");
+    console.log("help im tryung to connect")
+    for await (let data of connected){
+        console.log(data);
+    }
+})();

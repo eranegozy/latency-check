@@ -5,12 +5,8 @@
         <link href="//fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet" type="text/css">
         <link rel="icon" type="image/png" href="/favicon.ico">
         <link rel="stylesheet" href="index.css">
-        <script type="text/javascript" src="/js/socketcluster.js"></script>
+        <script type="text/javascript" src="/js/socketcluster-client.js"></script>
         <script type="text/javascript" src="/js/buffertowav.js"></script>
-        <!-- <audio id='chirp'>
-        <source src='audio/chirp.wav' type='audio/xwav'>
-        This browser does not support HTML Audio.
-        </audio> -->  
     </head>
 
     <body>
@@ -20,7 +16,8 @@
                 <div class="title">
                     Press a Button
                 </div>
-                <button onmousedown="send_play()" id = "rec" class="button"> Chirp</button>
+                <div id="buttonArea">
+                </div>
                 <br>
                 <a id="downloadlink"></a>
                 <br>

@@ -1,29 +1,25 @@
 {
   "name": "socketcluster-sample",
   "description": "A sample SocketCluster app",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "contributors": [
     {
       "name": "Jonathan Gros-Dubois",
       "email": "grosjona@yahoo.com.au"
-    },
-    {
-      "name": "Aza Noriega",
-      "email": "Aza.Noriega@gmail.com"
     }
   ],
   "dependencies": {
-    "audiobuffer-to-wav": "^1.0.0",
-    "express": "^4.16.4",
-    "express-useragent": "^1.0.13",
-    "minimist": "1.2.3",
-    "morgan": "^1.9.1",
-    "sc-framework-health-check": "^2.0.0",
-    "sc-hot-reboot": "^1.0.0",
-    "scc-broker-client": "^6.1.0",
-    "serve-static": "1.13.2",
-    "socketcluster": "^14.4.1",
-    "socketcluster-client": "^14.3.1"
+    "connect": "^3.6.6",
+    "eetase": "^4.0.0",
+    "express": "^4.16.3",
+    "morgan": "^1.7.0",
+    "nodemon": "^1.19.4",
+    "sc-errors": "^2.0.1",
+    "scc-broker-client": "^8.0.0",
+    "serve-static": "^1.13.2",
+    "socketcluster-client": "^16.0.1",
+    "socketcluster-server": "^16.0.0",
+    "uuid": "^3.3.2"
   },
   "keywords": [
     "websocket",
@@ -34,6 +30,6 @@
   ],
   "readmeFilename": "README.md",
   "scripts": {
-    "start": "node server.js"
+    "start": "nodemon server.js"
   }
 }

@@ -118,41 +118,64 @@ const options = {
   port: 8000,
   // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
 };
-const socket = socketCluster.create(options);
+const socket = socketClusterClient.create(options);
 
 // Recieve Roundtrip times and Add them to the page
 var send_time = socket.subscribe('send_time');
-send_time.watch(function(j){
-  rec_time = j.time;
-  num = j.id;
-  let now = Date.now()
-  rt_time = now - cTime;
-  back_time = now - rec_time;
-  to_time = rec_time - cTime;
-  document.getElementById("time").innerHTML += num + "<br> Time to took " + 
-  to_time + 'ms' + "<br> Time back took " + 
-  back_time +"ms <br> Roundtrip took " + 
-  rt_time + 'ms <br> <br>';
-
-});
+var add_button = socket.subscribe("addButton");
+var remove_button = socket.subscribe("removeButton");
+var connected = socket.subscribe("connected");
+var disconnected = socket.subscribe("disconnected");
 
 // Send play command to client
 function send_play() {
-  document.getElementById("time").innerHTML = ""
-  cTime = Date.now()
-  socket.publish('play');
+    document.getElementById("time").innerHTML = "";
+    cTime = Date.now();
+    socket.publish('play');
 }
 
+(async() => {
+    for await (let data of connected){
+        console.log("con" + data.clientID);
+        console.log(data);
+    }
+})();
+
+(async() => {
+    for await (let idNumber of disconnected){
+        console.log("dis" + idNumber)
+        console.log(idNumber);
+    }
+})();
+
+(async() => {
+    for await (let j of send_time) {
+        let rec_time = j.time;
+        let num = j.id;
+        let now = Date.now()
+        let rt_time = now - cTime;
+        let back_time = now - rec_time;
+        let to_time = rec_time - cTime;
+        document.getElementById("time").innerHTML += num + "<br> Time to took " + 
+        to_time + 'ms' + "<br> Time back took " + 
+        back_time +"ms <br> Roundtrip took " + 
+        rt_time + 'ms <br> <br>';
+    }
+})();
+
 // Log errors
-socket.on('error', function (err) {
-  console.error(err);
-});
+(async() => {
+    for await (let err of socket.listener('error'))
+        console.error(err);
+})();
 
-socket.on('connect', function () {
-  console.log('Socket is connected');
-});
+(async() => {
+    for await (let data of socket.listener('connect'))
+        console.log('Socket is connected');
+})();
 
-socket.on('subscribe', function (channelName) {
-  console.log(`Socket is subscribed to ${channelName}`);
-});
+(async() => {
+    for await (let data of socket.listener('subscribe'))
+        console.log(`Socket is subscribed to ${data.channel}`);
+})();
 

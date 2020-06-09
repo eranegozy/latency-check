@@ -4,7 +4,7 @@ Client-server javascript app for measuring audio latency on client browsers
 ## Usage
 Inside the app directory `npm install` the required dependencies 
 
-Run `npm start` to start the webserver to connect to on localhost port 3000
+Run `npm start` to start the webserver to connect to on localhost:8000
 
 
 

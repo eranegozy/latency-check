@@ -63,10 +63,7 @@ function playSample(audioContext, audioBuffer) {
     return sampleSource;
 }
 
-const playButton = document.querySelector('button');
-playButton.addEventListener('click', function() {
-    playSound()
-}, false);
+
 
 //SOCKET CLUSTER
 const options = {
@@ -77,15 +74,37 @@ const options = {
 };
 
 const socket = socketClusterClient.create(options);
+let num;
+const playButton = document.querySelector('button');
+playButton.addEventListener('click', function() {
+    playSound();
+    if (num == socket.id){
+        // console.log("fist clrick");
+        // socket.transmit("firstClick");
+    }
+}, false);
 
 (async() => {
     let recieved_play = socket.subscribe('play');
     // Send time and ID number to operator
-    for await (let sound of recieved_play) {
-        console.log(sound);
+    for await (let idNumber of recieved_play) {
         let now = Date.now();
-        playSound();
-        socket.publish('send_time', {time: now, id: num});
+        console.log(idNumber);
+        console.log(num);
+        if (idNumber == socket.id){
+            playSound();
+            socket.transmit('send_time', {time: now, id: idNumber});
+        }
+    }
+})();
+
+(async() => {
+    let updateID = socket.subscribe('updateID');
+    // Send time and ID number to operator
+    for await (let idNumber of updateID) {
+        // let now = Date.now();
+        num = idNumber;
+        document.getElementById("id_num").innerHTML = "#" + idNumber;
     }
 })();
 
@@ -103,7 +122,8 @@ const socket = socketClusterClient.create(options);
     for await (let data of socket.listener('connect')) {
         console.log('Socket is connected');
         document.getElementById('e_msg').innerHTML = "";
-        document.getElementById("id_num") = `#${socket.id}`;
+        document.getElementById("id_num").innerHTML = `#${socket.id}`;
+        num = socket.id;
     }
 })();
 
@@ -116,7 +136,7 @@ const socket = socketClusterClient.create(options);
 (async() => {
     for await (let data of socket.listener('disconnect')){
         console.log("help Im gone now");
-        socket.transmitPublish('removeButton');
+        socket.transmit('removeButton');
     }
 })();
 

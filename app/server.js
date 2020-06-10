@@ -81,11 +81,15 @@ expressApp.get('/health-check', (req, res) => {
         let clientID = Math.floor(Math.random()*1000000);
         await agServer.exchange.transmitPublish("connected", 
         {"clientID": clientID, "socketID": socket.id});
-        console.log("sent out connection");
         (async () => {
             for await (let data of socket.listener('disconnect')) {
-                console.log('goodbye seeya');
-                agServer.exchange.transmitPublish("disconnected", clientID);
+                agServer.exchange.transmitPublish("disconnected", {"clientID": clientID, "socketID": socket.id});
+            }
+        })();
+
+        (async () => {
+            for await (let data of socket.receiver('firstClick')) {
+                agServer.exchange.transmitPublish("updateID", clientID);
             }
         })();
   }

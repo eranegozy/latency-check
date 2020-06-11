@@ -31,18 +31,22 @@ function send_play(clientID) {
 
 (async() => {
     for await (let data of connected){
-        console.log("con" + data.socketID);
+        // console.log("con" + data.socketID);
+        console.log("con" + data.clientID);
+
         console.log(data);
-        // $("#buttonArea").append(`<button class="button" onclick = "send_play(${data.clientID})" id="${data.clientID}">${data.clientID}</button>`);
-        $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.socketID}')" id="${data.socketID}">${data.socketID}</button>`);
+        $("#buttonArea").append(`<button class="button" onclick = "send_play(${data.clientID})" id="${data.clientID}">${data.clientID}</button>`);
+        // $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.socketID}')" id="${data.socketID}">${data.socketID}</button>`);
 
     }
 })();
 
 (async() => {
     for await (let data of disconnected){
-        console.log("dis" + data.socketID)
-        $(`#${data.socketID}`).remove();
+        // console.log("dis" + data.socketID)
+        console.log("dis" + data.clientID);
+        $(`#${data.clientID}`).remove();
+        // $(`#${data.socketID}`).remove();
     }
 })();
 

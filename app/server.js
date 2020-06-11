@@ -89,7 +89,7 @@ expressApp.get('/health-check', (req, res) => {
 
         (async () => {
             for await (let data of socket.receiver('firstClick')) {
-                agServer.exchange.transmitPublish("updateID", clientID);
+                agServer.exchange.transmitPublish("updateID", {"clientID": clientID, "socketID": socket.id});
             }
         })();
   }

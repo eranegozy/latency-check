@@ -79,8 +79,8 @@ const playButton = document.querySelector('button');
 playButton.addEventListener('click', function() {
     playSound();
     if (num == socket.id){
-        // console.log("fist clrick");
-        // socket.transmit("firstClick");
+        console.log("fist clrick");
+        socket.transmit("firstClick");
     }
 }, false);
 
@@ -91,7 +91,7 @@ playButton.addEventListener('click', function() {
         let now = Date.now();
         console.log(idNumber);
         console.log(num);
-        if (idNumber == socket.id){
+        if (idNumber == num){
             playSound();
             socket.transmit('send_time', {time: now, id: idNumber});
         }
@@ -101,10 +101,12 @@ playButton.addEventListener('click', function() {
 (async() => {
     let updateID = socket.subscribe('updateID');
     // Send time and ID number to operator
-    for await (let idNumber of updateID) {
-        // let now = Date.now();
-        num = idNumber;
-        document.getElementById("id_num").innerHTML = "#" + idNumber;
+    
+    for await (let data of updateID) {
+        if (data.socketID == socket.id){
+            num = data.clientID;
+            document.getElementById("id_num").innerHTML = "#" + num;
+        }
     }
 })();
 
@@ -136,7 +138,7 @@ playButton.addEventListener('click', function() {
 (async() => {
     for await (let data of socket.listener('disconnect')){
         console.log("help Im gone now");
-        socket.transmit('removeButton');
+        // socket.transmit('removeButton');
     }
 })();
 

@@ -44,6 +44,11 @@ const track = audioContext.createBufferSource();
 track.buffer = buffer;
 track.connect(audioContext.destination);
 
+function changePage(){
+    document.getElementById("content").style = "display: show";
+    document.getElementById("intro").style = "display: none";
+}
+
 function playSound(){
     if (audioContext.state == 'suspended'){
         audioContext.resume();
@@ -52,7 +57,12 @@ function playSound(){
     // console.log(audioContext.outputLatency);
     d = new Date();
     // Update page with last time button was hit
-    document.getElementById('msg').innerHTML = d.toTimeString();
+    document.getElementById('msg1').innerHTML = "sound played at<br>" + d.toTimeString();
+    document.getElementById('msg2').innerHTML = "sound played at<br>" + d.toTimeString();
+    if (num == socket.id){
+        console.log("fist clrick");
+        socket.transmit("firstClick");
+    }
 }
 
 function playSample(audioContext, audioBuffer) {
@@ -75,7 +85,7 @@ const options = {
 
 const socket = socketClusterClient.create(options);
 let num;
-const playButton = document.querySelector('button');
+const playButton = document.querySelector('.button');
 playButton.addEventListener('click', function() {
     playSound();
     if (num == socket.id){
@@ -93,7 +103,6 @@ playButton.addEventListener('click', function() {
         console.log(num);
         if (idNumber == num){
             playSound();
-            socket.transmit('send_time', {time: now, id: idNumber});
         }
     }
 })();
@@ -105,7 +114,7 @@ playButton.addEventListener('click', function() {
     for await (let data of updateID) {
         if (data.socketID == socket.id){
             num = data.clientID;
-            document.getElementById("id_num").innerHTML = "#" + num;
+            document.getElementById("id_num").innerHTML = "Client ID: " + num;
         }
     }
 })();

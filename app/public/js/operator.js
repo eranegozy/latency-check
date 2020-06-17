@@ -21,10 +21,11 @@ var connected = socket.subscribe("connected");
 var disconnected = socket.subscribe("disconnected");
 
 // Send play command to client
-function send_play(clientID) {
+function send_play(letter) {
     document.getElementById("time").innerHTML = "";
     cTime = Date.now();
-    socket.transmitPublish('play', clientID);
+    console.log(letter);
+    socket.transmitPublish('play', letter);
     createMediaRecorder();
     // startRecording();
 }
@@ -35,7 +36,7 @@ function send_play(clientID) {
         console.log("con" + data.clientID);
 
         console.log(data);
-        $("#buttonArea").append(`<button class="button" onclick = "send_play(${data.clientID})" id="${data.clientID}">${data.clientID}</button>`);
+        $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
         // $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.socketID}')" id="${data.socketID}">${data.socketID}</button>`);
 
     }

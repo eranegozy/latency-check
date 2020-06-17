@@ -29,6 +29,7 @@ const SCC_PUB_SUB_BATCH_DURATION = Number(process.env.SCC_PUB_SUB_BATCH_DURATION
 const SCC_BROKER_RETRY_DELAY = Number(process.env.SCC_BROKER_RETRY_DELAY) || null;
 
 let agOptions = {};
+var gBootTime = Date.now();
 
 if (process.env.SOCKETCLUSTER_OPTIONS) {
   let envOptions = JSON.parse(process.env.SOCKETCLUSTER_OPTIONS);
@@ -54,7 +55,7 @@ expressApp.get('/operator', function(req, res){
     
 expressApp.post('/controller', function(req, res){
     if (req.body.password == 'lagpolice') {
-    res.sendFile(path.join(__dirname + '/public/operator.html'));
+        res.sendFile(path.join(__dirname + '/public/operator.html'));
     } else {
         return res.status(401).send();
     }
@@ -76,14 +77,24 @@ expressApp.get('/health-check', (req, res) => {
 })();
 
 // SocketCluster/WebSocket connection handling loop.
+var clients = new Array(26).fill(0);
 (async () => {
   for await (let {socket} of agServer.listener('connection')) {
-        let clientID = Math.floor(Math.random()*1000000);
+
+        // syncclock.SyncClockServerMsgHandler(socket, getTime);
+        let clientID = "A";
+        let num = clientID.charCodeAt(0) - 65;
+        while (clients[num] != 0){
+            num += 1;
+            clientID = String.fromCharCode(clientID.charCodeAt(0) + 1);
+        }
+        clients[num] = clientID;
         await agServer.exchange.transmitPublish("connected", 
         {"clientID": clientID, "socketID": socket.id});
         (async () => {
             for await (let data of socket.listener('disconnect')) {
                 agServer.exchange.transmitPublish("disconnected", {"clientID": clientID, "socketID": socket.id});
+                clients[num] = 0;
             }
         })();
 
@@ -94,6 +105,19 @@ expressApp.get('/health-check', (req, res) => {
         })();
   }
 })();
+
+function getTime() {
+    return (Date.now() - gBootTime) * 0.001;
+}
+
+// var syncclock = {
+//     SyncClockServerMsgHandler : function(socket, getTimeFunc) {
+//       socket.on('clockPing', localPing => {
+//         var refTime = getTimeFunc();
+//         socket.emit('clockPong', [localPing, refTime]);
+//       });
+//     }
+// }
 
 httpServer.listen(SOCKETCLUSTER_PORT);
 

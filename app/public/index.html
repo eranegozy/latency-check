@@ -2,23 +2,36 @@
 <html>
     <head>
         <title>Latency Check</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
         <link href="//fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet" type="text/css">
         <link rel="icon" type="image/png" href="/favicon.ico">
         <link rel="stylesheet" href="index.css">
         <script type="text/javascript" src="/js/socketcluster-client.js"></script>
     </head>
-    <body>
-        <div class="container">
+    <body onmousedown="return false" onselectstart="return false">
+        <div class="container" id="intro">
+            <div>
+                welcome to the latency checker
+                <br>
+                make sure your volume it up
+                <br>
+                press the speaker to play a sound
+                <br>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/2/21/Speaker_Icon.svg" width=50% onclick="playSound()">
+                <br>
+                <button class="next_button" onclick="changePage()"> Next </button>
+                <div id="msg1"></div>
+            </div>
+        </div>
+        <div class="container" style="display: none" id="content">
             <div class="content">
-                <p id = "id_num">#</p>
-                <div class="title">
-                    <span>Press a Button</span>
-                </div>
+                <b><p id = "id_num">Client ID: </p></b>
+                
+
                 <button class="button">Chirp</button>
                 <br>
                 <br>
-                <div id="msg"></div>
+                <div id="msg2"></div>
                 <div id="e_msg"></div>
             </div>
         </div>

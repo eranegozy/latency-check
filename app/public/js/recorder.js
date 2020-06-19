@@ -58,7 +58,7 @@ const conv = (vec1, vec2) => {
     return convVec;
 };
 
-function createMediaRecorder(){
+function createMediaRecorder(socket, letter){
     //Create MediaRecorder
     if (navigator.mediaDevices){
         navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
@@ -101,6 +101,7 @@ function createMediaRecorder(){
                     a.setAttribute("id", "downloadlink");
                     a.innerHTML = "download sound file";
                     document.getElementsByClassName("container")[0].appendChild(a);
+                    socket.transmitPublish("finishedPlaying", letter)
                     // a.click();
                 }));            
             }

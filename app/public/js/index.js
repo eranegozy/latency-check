@@ -1,4 +1,5 @@
 // const num = Math.floor(Math.random()*1000000);
+
 const audio_filename = 'audio/chirp.wav';
 const nav = {
     // num: num,
@@ -84,13 +85,22 @@ const options = {
 };
 
 const socket = socketClusterClient.create(options);
+
+var syncClock;
+requirejs(["js/syncclock"], function(clock) {
+    syncClock = new clock.SyncClock(socket);
+});
+
+
 let num;
 const playButton = document.querySelector('.button');
 playButton.addEventListener('click', function() {
-    playSound();
-    if (num == socket.id){
-        console.log("fist clrick");
-        socket.transmit("firstClick");
+    if (document.getElementById("soundButton").className != "dead_button"){
+        playSound();
+        if (num == socket.id){
+            console.log("fist clrick");
+            socket.transmit("firstClick");
+        }
     }
 }, false);
 
@@ -98,11 +108,24 @@ playButton.addEventListener('click', function() {
     let recieved_play = socket.subscribe('play');
     // Send time and ID number to operator
     for await (let idNumber of recieved_play) {
-        let now = Date.now();
         console.log(idNumber);
         console.log(num);
         if (idNumber == num){
+            document.getElementById("soundButton").className = "dead_button";
             playSound();
+            socket.transmitPublish('send_time', syncClock.getTime());
+        }
+    }
+})();
+
+(async() => {
+    let finished_play = socket.subscribe('finishedPlaying');
+    // Send time and ID number to operator
+    for await (let idNumber of finished_play) {
+        console.log(idNumber);
+        console.log(num);
+        if (idNumber == num){
+            document.getElementById("soundButton").className = "button";
         }
     }
 })();

@@ -7,17 +7,20 @@
         <link rel="icon" type="image/png" href="/favicon.ico">
         <link rel="stylesheet" href="index.css">
         <script type="text/javascript" src="/js/socketcluster-client.js"></script>
+        <script type="text/javascript" src="/js/require.js"></script>
     </head>
     <body onmousedown="return false" onselectstart="return false">
         <div class="container" id="intro">
             <div>
                 welcome to the latency checker
                 <br>
-                make sure your volume it up
+                make sure your volume is up
                 <br>
                 press the speaker to play a sound
                 <br>
                 <img src="https://upload.wikimedia.org/wikipedia/commons/2/21/Speaker_Icon.svg" width=50% onclick="playSound()">
+                <br>
+                <br>
                 <br>
                 <button class="next_button" onclick="changePage()"> Next </button>
                 <div id="msg1"></div>
@@ -28,7 +31,7 @@
                 <b><p id = "id_num">Client ID: </p></b>
                 
 
-                <button class="button">Chirp</button>
+                <button class="button" id="soundButton">Chirp</button>
                 <br>
                 <br>
                 <div id="msg2"></div>
@@ -37,4 +40,5 @@
         </div>
     </body>
     <script type="text/javascript" src="/js/index.js"></script>
+    
 </html>

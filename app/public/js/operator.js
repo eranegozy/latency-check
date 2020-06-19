@@ -13,6 +13,13 @@ const options = {
 };
 const socket = socketClusterClient.create(options);
 
+var serverTime;
+var syncClock;
+requirejs(["js/syncclock"], function(clock) {
+    syncClock = new clock.SyncClock(socket);
+});
+
+
 // Recieve Roundtrip times and Add them to the page
 var send_time = socket.subscribe('send_time');
 var add_button = socket.subscribe("addButton");
@@ -23,11 +30,11 @@ var disconnected = socket.subscribe("disconnected");
 // Send play command to client
 function send_play(letter) {
     document.getElementById("time").innerHTML = "";
-    cTime = Date.now();
     console.log(letter);
+    serverTime = syncClock.getTime();
     socket.transmitPublish('play', letter);
-    createMediaRecorder();
-    // startRecording();
+    createMediaRecorder(socket, letter);
+    // socket.transmitPublish('finishedPlaying', letter);
 }
 
 (async() => {
@@ -52,17 +59,10 @@ function send_play(letter) {
 })();
 
 (async() => {
-    for await (let j of send_time) {
-        let rec_time = j.time;
-        let num = j.id;
-        let now = Date.now()
-        let rt_time = now - cTime;
-        let back_time = now - rec_time;
-        let to_time = rec_time - cTime;
-        document.getElementById("time").innerHTML += num + "<br> Time to took " + 
-        to_time + 'ms' + "<br> Time back took " + 
-        back_time +"ms <br> Roundtrip took " + 
-        rt_time + 'ms <br> <br>';
+    for await (let data of send_time) {
+        console.log(data);
+        console.log(serverTime);
+        console.log(data-serverTime);
     }
 })();
 

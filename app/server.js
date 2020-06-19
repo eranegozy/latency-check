@@ -81,7 +81,7 @@ var clients = new Array(26).fill(0);
 (async () => {
   for await (let {socket} of agServer.listener('connection')) {
 
-        // syncclock.SyncClockServerMsgHandler(socket, getTime);
+        syncclock.SyncClockServerMsgHandler(socket, getTime);
         let clientID = "A";
         let num = clientID.charCodeAt(0) - 65;
         while (clients[num] != 0){
@@ -110,14 +110,16 @@ function getTime() {
     return (Date.now() - gBootTime) * 0.001;
 }
 
-// var syncclock = {
-//     SyncClockServerMsgHandler : function(socket, getTimeFunc) {
-//       socket.on('clockPing', localPing => {
-//         var refTime = getTimeFunc();
-//         socket.emit('clockPong', [localPing, refTime]);
-//       });
-//     }
-// }
+var syncclock = {
+    SyncClockServerMsgHandler : function(socket, getTimeFunc) {
+        (async () => {
+            for await (let localPing of socket.receiver('clockPing')){
+                var refTime = getTimeFunc();
+                socket.transmitPublish('clockPong', [localPing, refTime]);
+            }
+        })();
+    }
+}
 
 httpServer.listen(SOCKETCLUSTER_PORT);
 

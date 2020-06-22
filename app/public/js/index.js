@@ -108,8 +108,6 @@ playButton.addEventListener('click', function() {
     let recieved_play = socket.subscribe('play');
     // Send time and ID number to operator
     for await (let idNumber of recieved_play) {
-        console.log(idNumber);
-        console.log(num);
         if (idNumber == num){
             document.getElementById("soundButton").className = "dead_button";
             playSound();
@@ -122,8 +120,6 @@ playButton.addEventListener('click', function() {
     let finished_play = socket.subscribe('finishedPlaying');
     // Send time and ID number to operator
     for await (let idNumber of finished_play) {
-        console.log(idNumber);
-        console.log(num);
         if (idNumber == num){
             document.getElementById("soundButton").className = "button";
         }

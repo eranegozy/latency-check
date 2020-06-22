@@ -116,6 +116,7 @@ var syncclock = {
             for await (let localPing of socket.receiver('clockPing')){
                 var refTime = getTimeFunc();
                 socket.transmitPublish('clockPong', [localPing, refTime]);
+                console.log("sync clock moving?")
             }
         })();
     }

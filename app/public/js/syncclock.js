@@ -4,7 +4,7 @@
 // Released under the MIT License (http://opensource.org/licenses/MIT)
 //----------------------------------------------------------
 
-
+console.log("is syncclock going?")
 
 function ClockEstimatorFilter() {
   var self = this;
@@ -85,8 +85,9 @@ function SyncClock(socket) {
 
   // handle pong msg (response to clockPing)
   (async() =>{
-    for await (let data of socket.receiver('clockPong')){
-        // console.log('clockPong', data);
+      let chanName = socket.subscribe('clockPong');
+    for await (let data of chanName){
+        console.log('clockPong', data);
 
         var localPing = data[0];
         var refTime = data[1];
@@ -158,7 +159,7 @@ SyncClock.prototype._poll = function() {
 
   if (localNow > this.nextPingTime) {
     // console.log('ping: ' + localNow.toFixed(3));
-    this.socket.emit('clockPing', this.getLocalTime());
+    this.socket.transmitPublish('clockPing', this.getLocalTime());
     this.nextPingTime = localNow + 3.0; // largest amount of time to wait before trying another ping.
   }
 }

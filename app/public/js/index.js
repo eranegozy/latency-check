@@ -90,8 +90,11 @@ var syncClock;
 requirejs(["js/syncclock"], function(clock) {
     syncClock = new clock.SyncClock(socket);
 });
-
-
+function updateTime(){
+    if (syncClock != null)
+        document.getElementById('time').innerHTML = syncClock.getTime().toFixed(4);
+}
+setInterval(updateTime, 1);
 let num;
 const playButton = document.querySelector('.button');
 playButton.addEventListener('click', function() {
@@ -107,11 +110,12 @@ playButton.addEventListener('click', function() {
 (async() => {
     let recieved_play = socket.subscribe('play');
     // Send time and ID number to operator
-    for await (let idNumber of recieved_play) {
-        if (idNumber == num){
+    for await (let data of recieved_play) {
+        if (data.clientID == num){
+            let prelag = syncClock.getTime()-data.serverTime;
             document.getElementById("soundButton").className = "dead_button";
+            socket.transmitPublish('send_time', {prelag: prelag, playTime: syncClock.getTime()});
             playSound();
-            socket.transmitPublish('send_time', syncClock.getTime());
         }
     }
 })();

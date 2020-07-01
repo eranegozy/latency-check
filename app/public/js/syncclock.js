@@ -85,9 +85,9 @@ function SyncClock(socket) {
 
   // handle pong msg (response to clockPing)
   (async() =>{
-      let chanName = socket.subscribe('clockPong');
-    for await (let data of chanName){
-        console.log('clockPong', data);
+      
+    for await (let data of socket.receiver('clockPong')){
+        // console.log('clockPong', data);
 
         var localPing = data[0];
         var refTime = data[1];
@@ -159,7 +159,7 @@ SyncClock.prototype._poll = function() {
 
   if (localNow > this.nextPingTime) {
     // console.log('ping: ' + localNow.toFixed(3));
-    this.socket.transmitPublish('clockPing', this.getLocalTime());
+    this.socket.transmit('clockPing', this.getLocalTime());
     this.nextPingTime = localNow + 3.0; // largest amount of time to wait before trying another ping.
   }
 }

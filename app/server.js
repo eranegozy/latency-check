@@ -84,7 +84,7 @@ var clients = new Array(26).fill(0);
         syncclock.SyncClockServerMsgHandler(socket, getTime);
         let clientID = "A";
         let num = clientID.charCodeAt(0) - 65;
-        while (clients[num] != 0){
+        while (clients[num] != 0 || num >= 26){
             num += 1;
             clientID = String.fromCharCode(clientID.charCodeAt(0) + 1);
         }
@@ -115,8 +115,7 @@ var syncclock = {
         (async () => {
             for await (let localPing of socket.receiver('clockPing')){
                 var refTime = getTimeFunc();
-                socket.transmitPublish('clockPong', [localPing, refTime]);
-                console.log("sync clock moving?")
+                socket.transmit('clockPong', [localPing, refTime]);
             }
         })();
     }

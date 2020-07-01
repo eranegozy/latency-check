@@ -2,8 +2,20 @@ var script = document.createElement('script');
 script.src = 'https://code.jquery.com/jquery-3.4.1.min.js';
 script.type = 'text/javascript';
 document.getElementsByTagName('head')[0].appendChild(script);
-
-
+var mediaRecorder;
+var constraints = {
+    audio: {
+      //sampleRate: 44100
+    },
+    video: false
+  };
+var opt = {};
+if (navigator.mediaDevices){
+    navigator.mediaDevices.getUserMedia(constraints).then(
+        function(stream){
+            mediaRecorder = new MediaRecorder(stream, opt);
+        }
+    )}
 
 const options = {
   // secure: true,
@@ -18,7 +30,11 @@ var syncClock;
 requirejs(["js/syncclock"], function(clock) {
     syncClock = new clock.SyncClock(socket);
 });
-
+function updateTime(){
+    if (syncClock != null)
+        document.getElementById('time').innerHTML = syncClock.getTime().toFixed(4);
+}
+setInterval(updateTime, 1);
 
 // Recieve Roundtrip times and Add them to the page
 var send_time = socket.subscribe('send_time');
@@ -32,8 +48,8 @@ function send_play(letter) {
     document.getElementById("time").innerHTML = "";
     console.log(letter);
     serverTime = syncClock.getTime();
-    socket.transmitPublish('play', letter);
-    createMediaRecorder(socket, letter);
+    socket.transmitPublish('play', {clientID: letter, serverTime: serverTime});
+    createMediaRecorder(mediaRecorder, socket, letter);
     // socket.transmitPublish('finishedPlaying', letter);
 }
 
@@ -41,11 +57,8 @@ function send_play(letter) {
     for await (let data of connected){
         // console.log("con" + data.socketID);
         console.log("con" + data.clientID);
-
         console.log(data);
         $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
-        // $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.socketID}')" id="${data.socketID}">${data.socketID}</button>`);
-
     }
 })();
 
@@ -54,15 +67,15 @@ function send_play(letter) {
         // console.log("dis" + data.socketID)
         console.log("dis" + data.clientID);
         $(`#${data.clientID}`).remove();
-        // $(`#${data.socketID}`).remove();
     }
 })();
 
 (async() => {
     for await (let data of send_time) {
-        console.log(data);
-        console.log(serverTime);
-        console.log(data-serverTime);
+        let currentServerTime = syncClock.getTime();
+        console.log('prelag', (data.prelag * 1000 * 44.1));
+        let postlag = (currentServerTime-data.playTime);
+        console.log('postlag', (postlag * 1000 * 44.1));
     }
 })();
 

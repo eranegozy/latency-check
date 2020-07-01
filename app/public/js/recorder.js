@@ -1,12 +1,12 @@
-var cTime, mediaRecorder, audioContext, wav;
+var cTime, audioContext, wav;
 var opt = {};
 
-var constraints = {
-  audio: {
-    //sampleRate: 44100
-  },
-  video: false
-};
+// var constraints = {
+//   audio: {
+//     //sampleRate: 44100
+//   },
+//   video: false
+// };
 
 var original_sound_path = 'audio/chirp.wav';
 
@@ -58,19 +58,26 @@ const conv = (vec1, vec2) => {
     return convVec;
 };
 
-function createMediaRecorder(socket, letter){
+function createMediaRecorder(mediaRecorder, socket, letter){
     //Create MediaRecorder
-    if (navigator.mediaDevices){
-        navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
+    // if (navigator.mediaDevices){
+    //     navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
 
             //start recording for 500ms
-            let mediaRecorder = new MediaRecorder(stream, opt);
-            console.log('startn')
+            
+            console.log('starting Media Recorder')
             mediaRecorder.start();
             setTimeout(() => {mediaRecorder.stop();}, 500);
             let chunks = [];
+
             mediaRecorder.ondataavailable = function(e){
+                console.log('Data Available');
                 promise = e.data.arrayBuffer();
+            }
+
+            mediaRecorder.onstop = function(e) {
+
+       
                 promise.then(value=>audioContext.decodeAudioData(value, function(theBuffer){
                     wav = audioBufferToWav(theBuffer, 3);
                     chunks.push(wav);
@@ -84,6 +91,7 @@ function createMediaRecorder(socket, letter){
 
                     let c = conv(rec, org);
                     let am = argMax(c);
+                    console.log('Calculation Finished')
                     let lag = am - rec.length + 1;
                     document.getElementById("time").innerHTML += '<br><b> lag: ' + lag + '<b><br>';
                     console.log("lag: " + lag);
@@ -102,20 +110,11 @@ function createMediaRecorder(socket, letter){
                     a.innerHTML = "download sound file";
                     document.getElementsByClassName("container")[0].appendChild(a);
                     socket.transmitPublish("finishedPlaying", letter)
+                    console.log("All Done");
                     // a.click();
-                }));            
+                })); 
             }
+        // });
 
-            mediaRecorder.onstop = function(e) {
-
-            }
-        });
-
-    }
-}
-
-function startRecording(){
-    console.log('startn')
-    mediaRecorder.start();
-    setTimeout(() => {mediaRecorder.stop();}, 500);
+    // }
 }

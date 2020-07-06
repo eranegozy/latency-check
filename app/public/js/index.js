@@ -85,7 +85,6 @@ const options = {
 };
 
 const socket = socketClusterClient.create(options);
-
 var syncClock;
 requirejs(["js/syncclock"], function(clock) {
     syncClock = new clock.SyncClock(socket);
@@ -95,13 +94,13 @@ function updateTime(){
         document.getElementById('time').innerHTML = syncClock.getTime().toFixed(4);
 }
 setInterval(updateTime, 1);
+
 let num;
 const playButton = document.querySelector('.button');
 playButton.addEventListener('click', function() {
     if (document.getElementById("soundButton").className != "dead_button"){
         playSound();
         if (num == socket.id){
-            console.log("fist clrick");
             socket.transmit("firstClick");
         }
     }
@@ -112,9 +111,10 @@ playButton.addEventListener('click', function() {
     // Send time and ID number to operator
     for await (let data of recieved_play) {
         if (data.clientID == num){
-            let prelag = syncClock.getTime()-data.serverTime;
+            let playTime = syncClock.getTime();
+            let prelag = playTime-data.serverTime;
             document.getElementById("soundButton").className = "dead_button";
-            socket.transmitPublish('send_time', {prelag: prelag, playTime: syncClock.getTime()});
+            socket.transmitPublish('send_time', {prelag: prelag, playTime: playTime});
             playSound();
         }
     }

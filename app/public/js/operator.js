@@ -10,6 +10,7 @@ var constraints = {
     video: false
   };
 var opt = {};
+
 if (navigator.mediaDevices){
     navigator.mediaDevices.getUserMedia(constraints).then(
         function(stream){
@@ -24,8 +25,6 @@ const options = {
   // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
 };
 const socket = socketClusterClient.create(options);
-
-var serverTime;
 var syncClock;
 requirejs(["js/syncclock"], function(clock) {
     syncClock = new clock.SyncClock(socket);
@@ -35,6 +34,8 @@ function updateTime(){
         document.getElementById('time').innerHTML = syncClock.getTime().toFixed(4);
 }
 setInterval(updateTime, 1);
+var serverTime;
+
 
 // Recieve Roundtrip times and Add them to the page
 var send_time = socket.subscribe('send_time');
@@ -50,6 +51,7 @@ function send_play(letter) {
     serverTime = syncClock.getTime();
     socket.transmitPublish('play', {clientID: letter, serverTime: serverTime});
     createMediaRecorder(mediaRecorder, socket, letter);
+    // createMediaRecorder(socket, letter);
     // socket.transmitPublish('finishedPlaying', letter);
 }
 
@@ -70,12 +72,13 @@ function send_play(letter) {
     }
 })();
 
+var prelagSamples;
 (async() => {
     for await (let data of send_time) {
-        let currentServerTime = syncClock.getTime();
-        console.log('prelag', (data.prelag * 1000 * 44.1));
-        let postlag = (currentServerTime-data.playTime);
-        console.log('postlag', (postlag * 1000 * 44.1));
+        prelagSamples = data.prelag * 1000 * 44.1;
+        console.log('prelag', data.prelag);
+        console.log('samples', prelagSamples);
+        
     }
 })();
 

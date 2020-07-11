@@ -25,13 +25,14 @@ const options = {
   // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
 };
 const socket = socketClusterClient.create(options);
+
 var syncClock;
 requirejs(["js/syncclock"], function(clock) {
     syncClock = new clock.SyncClock(socket);
 });
 function updateTime(){
     if (syncClock != null)
-        document.getElementById('time').innerHTML = syncClock.getTime().toFixed(4);
+        document.getElementById('time').innerHTML = syncClock.getTime().toFixed(3);
 }
 setInterval(updateTime, 1);
 var serverTime;
@@ -39,18 +40,46 @@ var serverTime;
 
 // Recieve Roundtrip times and Add them to the page
 var send_time = socket.subscribe('send_time');
-var add_button = socket.subscribe("addButton");
-var remove_button = socket.subscribe("removeButton");
+
 var connected = socket.subscribe("connected");
 var disconnected = socket.subscribe("disconnected");
 
+const audio_filename = 'audio/chirp.wav';
+var audioContext, buffer;
+try{
+    audioContext = new webkitAudioContext();
+} catch{
+    audioContext = new AudioContext();
+}
+var audio_xhr = new XMLHttpRequest();
+audio_xhr.open('GET', audio_filename, true);
+audio_xhr.responseType = 'arraybuffer';
+audio_xhr.onload = function() {
+    audioContext.decodeAudioData(audio_xhr.response, function(theBuffer){
+        buffer = theBuffer;
+    });
+}
+function playSample(audioContext, audioBuffer) {
+    if (audioContext.state == 'suspended'){
+        audioContext.resume();
+    }
+    const sampleSource = audioContext.createBufferSource();
+    sampleSource.buffer = audioBuffer;
+    sampleSource.connect(audioContext.destination)
+    sampleSource.start();
+    return sampleSource;
+}
+
 // Send play command to client
 function send_play(letter) {
-    document.getElementById("time").innerHTML = "";
+    // document.getElementById("lag_time").innerHTML = "";
     console.log(letter);
     serverTime = syncClock.getTime();
-    socket.transmitPublish('play', {clientID: letter, serverTime: serverTime});
+    
     createMediaRecorder(mediaRecorder, socket, letter);
+    playSample(audioContext, buffer);
+
+    setTimeout(() => {socket.transmitPublish('play', {clientID: letter, serverTime: serverTime});}, 500);
     // createMediaRecorder(socket, letter);
     // socket.transmitPublish('finishedPlaying', letter);
 }

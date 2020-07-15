@@ -28,15 +28,15 @@ audio_xhr.onload = function() {
 }
 audio_xhr.send();
 
-function createMediaRecorder(mediaRecorder, socket, letter){
+function createMediaRecorder(mediaRecorder, socket, letter, syncClock){
     //Create MediaRecorder
     // if (navigator.mediaDevices){
     //     navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
 
             //start recording for 500ms
-            
             console.log('starting Media Recorder')
             mediaRecorder.start();
+
             setTimeout(() => {mediaRecorder.stop();}, 1000);
             let chunks = [];
 
@@ -56,8 +56,9 @@ function createMediaRecorder(mediaRecorder, socket, letter){
                     //rec-recorded
                     //org-original
                     var rec = theBuffer.getChannelData(0);
-                    var firstHalf = rec.slice(0, 21167);
-                    var secondHalf = rec.slice(21168, rec.length);
+                    var halfTime = 500 * 44.1
+                    var firstHalf = rec.slice(0, halfTime);
+                    var secondHalf = rec.slice(halfTime+1, rec.length);
                     console.log(firstHalf.length);
                     console.log(secondHalf.length);
                     
@@ -72,6 +73,7 @@ function createMediaRecorder(mediaRecorder, socket, letter){
                     console.log('Calculation Finished')
                     let lag1 = am1 - org.length + 1;
                     let lag2 = am2 - org.length + 1;
+                    // console.log(prelagSamples);
                     document.getElementById("lag_time").innerHTML += '<br><b> lag: ' + lag1 + '<b><br>';
                     document.getElementById("lag_time").innerHTML += '<br><b> adjusted lag: ' + (lag1-prelagSamples) + '<b><br>';
 

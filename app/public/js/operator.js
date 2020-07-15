@@ -34,7 +34,7 @@ function updateTime(){
     if (syncClock != null)
         document.getElementById('time').innerHTML = syncClock.getTime().toFixed(3);
 }
-setInterval(updateTime, 1);
+setInterval(updateTime, 0.1);
 var serverTime;
 
 
@@ -75,14 +75,41 @@ function send_play(letter) {
     // document.getElementById("lag_time").innerHTML = "";
     console.log(letter);
     serverTime = syncClock.getTime();
-    
-    createMediaRecorder(mediaRecorder, socket, letter);
+    console.log(serverTime);
+    createMediaRecorder(mediaRecorder, socket, letter, syncClock);
     playSample(audioContext, buffer);
+    let t1 = performance.now();
 
-    setTimeout(() => {socket.transmitPublish('play', {clientID: letter, serverTime: serverTime});}, 500);
+    setTimeout(() => {
+        let t2 = performance.now() - t1;
+        socket.transmitPublish('play', {clientID: letter, serverTime: serverTime, t2: t2});
+        console.log(t2);
+    }, 500);
     // createMediaRecorder(socket, letter);
     // socket.transmitPublish('finishedPlaying', letter);
 }
+
+// var clear;
+
+// function send_sequence(letter) {
+//     // (async() => {
+//     for (let i = 0; i < 5; i++){
+//         console.log(i);
+//         send_play(letter);
+//         let count = 0
+//         var clear = false;
+        
+//     }
+//     // })();
+// }
+
+(async() => {
+    let finished_play = socket.subscribe('finishedPlaying');
+    // Send time and ID number to operator
+    for await (let idNumber of finished_play) {
+        clear = true;
+    }
+})();
 
 (async() => {
     for await (let data of connected){
@@ -104,6 +131,7 @@ function send_play(letter) {
 var prelagSamples;
 (async() => {
     for await (let data of send_time) {
+        console.log(data.prelag);
         prelagSamples = data.prelag * 1000 * 44.1;
         console.log('prelag', data.prelag);
         console.log('samples', prelagSamples);

@@ -91,7 +91,7 @@ requirejs(["js/syncclock"], function(clock) {
 });
 function updateTime(){
     if (syncClock != null)
-        document.getElementById('time').innerHTML = syncClock.getTime().toFixed(4);
+        document.getElementById('time').innerHTML = syncClock.getTime().toFixed(3);
 }
 setInterval(updateTime, 1);
 
@@ -112,7 +112,10 @@ playButton.addEventListener('click', function() {
     for await (let data of recieved_play) {
         if (data.clientID == num){
             let playTime = syncClock.getTime();
-            let prelag = playTime-data.serverTime;
+            let prelag = playTime-data.serverTime-(data.t2/1000);
+            console.log(playTime);
+            console.log(data.serverTime);
+            console.log(prelag);
             document.getElementById("soundButton").className = "dead_button";
             socket.transmitPublish('send_time', {prelag: prelag, playTime: playTime});
             playSound();

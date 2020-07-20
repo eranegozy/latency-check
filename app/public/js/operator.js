@@ -72,7 +72,6 @@ function playSample(audioContext, audioBuffer) {
 
 // Send play command to client
 function send_play(letter) {
-    // document.getElementById("lag_time").innerHTML = "";
     console.log(letter);
     serverTime = syncClock.getTime();
     console.log(serverTime);
@@ -90,24 +89,26 @@ function send_play(letter) {
 }
 
 // var clear;
+var count = -1;
+function send_sequence(letter) {
+    count += 1;
+    if (count > 5){
+        count = -1;
+    } else {
+        send_play(letter);
+    }
+}
 
-// function send_sequence(letter) {
-//     // (async() => {
-//     for (let i = 0; i < 5; i++){
-//         console.log(i);
-//         send_play(letter);
-//         let count = 0
-//         var clear = false;
-        
-//     }
-//     // })();
-// }
+
 
 (async() => {
     let finished_play = socket.subscribe('finishedPlaying');
     // Send time and ID number to operator
-    for await (let idNumber of finished_play) {
-        clear = true;
+    for await (let letter of finished_play) {
+        console.log(count);
+        if (count != -1 && count < 5){
+            send_sequence(letter);
+        }
     }
 })();
 
@@ -117,6 +118,8 @@ function send_play(letter) {
         console.log("con" + data.clientID);
         console.log(data);
         $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
+        $("#buttonArea").append(`<button class="button-square" onclick = "send_sequence('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
+
     }
 })();
 

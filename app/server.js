@@ -61,8 +61,9 @@ expressApp.post('/controller', function(req, res){
     }
 });
 
-expressApp.post('/ua', function(nav){
-    console.log(nav.body);
+expressApp.post('/ua', function(req, res){
+    console.log(req.body);
+    res.status(200).send('OK');
 });
 // Add GET /health-check express route
 expressApp.get('/health-check', (req, res) => {

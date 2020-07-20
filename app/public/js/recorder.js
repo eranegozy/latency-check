@@ -75,17 +75,20 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock){
                     let lag2 = am2 - org.length + 1;
                     // console.log(prelagSamples);
                     document.getElementById("lag_time").innerHTML += '<br><b> lag: ' + lag1 + '<b><br>';
-                    document.getElementById("lag_time").innerHTML += '<br><b> adjusted lag: ' + (lag1-prelagSamples) + '<b><br>';
 
                     document.getElementById("lag_time").innerHTML += '<br><b> lag: ' + lag2 + '<b><br>';
-                    document.getElementById("lag_time").innerHTML += '<br><b> adjusted lag: ' + (lag2-prelagSamples) + '<b><br>';
+
+                    document.getElementById("lag_time").innerHTML += '<br><b> difference: ' + Math.abs(lag1-lag2) + '<b><br>';
+
+                    document.getElementById("lag_time").innerHTML += '<br><b> difference-delay: ' + (Math.abs(lag1-lag2) - prelagSamples) + '<b><br>';
 
                     console.log("lag: " + lag1);
-                    console.log("adjusted lag: " + (lag1-prelagSamples));
 
                     console.log("lag: " + lag2);
-                    console.log("adjusted lag: " + (lag2-prelagSamples));
 
+                    console.log("difference: " + (Math.abs(lag1-lag2)));
+
+                    console.log("difference-delay: " + Math.abs((Math.abs(lag1-lag2)-prelagSamples)));
                     const blob = new Blob(chunks, {'type': 'audio/wav'});
                     chunks = [];
 

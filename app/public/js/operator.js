@@ -2,6 +2,10 @@ var script = document.createElement('script');
 script.src = 'https://code.jquery.com/jquery-3.4.1.min.js';
 script.type = 'text/javascript';
 document.getElementsByTagName('head')[0].appendChild(script);
+
+const serverString = "http://localhost:3000";
+var users = {}
+const numTests = 3;
 var mediaRecorder;
 var constraints = {
     audio: {
@@ -71,11 +75,11 @@ function playSample(audioContext, audioBuffer) {
 }
 
 // Send play command to client
-function send_play(letter) {
+function send_play(letter, seq=false) {
     console.log(letter);
     serverTime = syncClock.getTime();
     console.log(serverTime);
-    createMediaRecorder(mediaRecorder, socket, letter, syncClock);
+    createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq);
     playSample(audioContext, buffer);
     let t1 = performance.now();
 
@@ -89,13 +93,29 @@ function send_play(letter) {
 }
 
 // var clear;
-var count = -1;
+var count = 0;
 function send_sequence(letter) {
     count += 1;
-    if (count > 5){
-        count = -1;
+    if (count > numTests){
+        let average = (array) => array.reduce((a, b) => a + b) / array.length;
+        let postData = {
+            averageOperatorLag: average(users[letter].operatorLag),
+            averageClientLag: average(users[letter].clientLag),
+            averageDifference: average(users[letter].differences),
+            clientPlatform: users[letter].platform,
+            clientUA: users[letter].userAgent
+        };
+        $.post(serverString+"/recordTest", postData,
+            function(data, response){
+                console.log("Data posted");
+                console.log(postData);
+        });
+        count = 0;
+        users[letter].operatorLag = [];
+        users[letter].clientLag = [];
+        users[letter].differences = [];
     } else {
-        send_play(letter);
+        send_play(letter, true);
     }
 }
 
@@ -106,8 +126,8 @@ function send_sequence(letter) {
     // Send time and ID number to operator
     for await (let letter of finished_play) {
         console.log(count);
-        if (count != -1 && count < 5){
-            send_sequence(letter);
+        if (count !=0 && count <= numTests){
+            send_sequence(letter, true);
         }
     }
 })();
@@ -119,7 +139,14 @@ function send_sequence(letter) {
         console.log(data);
         $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
         $("#buttonArea").append(`<button class="button-square" onclick = "send_sequence('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
-
+        users[data.clientID] = {
+            operatorLag: [],
+            clientLag: [],
+            differences: [],
+            platform: "",
+            userAgent: ""
+        }
+        
     }
 })();
 
@@ -128,6 +155,7 @@ function send_sequence(letter) {
         // console.log("dis" + data.socketID)
         console.log("dis" + data.clientID);
         $(`#${data.clientID}`).remove();
+        delete users[data.clientID];
     }
 })();
 
@@ -138,7 +166,11 @@ var prelagSamples;
         prelagSamples = data.prelag * 1000 * 44.1;
         console.log('prelag', data.prelag);
         console.log('samples', prelagSamples);
-        
+        if (users[data.clientID].userAgent == ""){
+            console.log('we got here');
+            users[data.clientID].userAgent = data.userAgent.ua;
+            users[data.clientID].platform = data.userAgent.platform;
+        }
     }
 })();
 

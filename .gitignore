@@ -1,4 +1,6 @@
 .DS_Store
+# Database files
+*.db
 
 # Logs
 logs

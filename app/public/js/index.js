@@ -3,18 +3,18 @@
 const audio_filename = 'audio/chirp.wav';
 const nav = {
     // num: num,
-    codename: navigator.appCodeName,
-    name: navigator.appName,
-    version: navigator.appVersion,
+    // codename: navigator.appCodeName,
+    // name: navigator.appName,
+    // version: navigator.appVersion,
     platform: navigator.platform,
     ua: navigator.userAgent
 };
 
 
-var xhr = new XMLHttpRequest();
-xhr.open("POST", '/ua');
-xhr.setRequestHeader('Content-Type', 'application/json');
-xhr.send(JSON.stringify(nav));
+// var xhr = new XMLHttpRequest();
+// xhr.open("POST", '/ua');
+// xhr.setRequestHeader('Content-Type', 'application/json');
+// xhr.send(JSON.stringify(nav));
 
 // Setup audio context
 var audioContext, buffer;
@@ -117,7 +117,7 @@ playButton.addEventListener('click', function() {
             console.log(data.serverTime);
             console.log(prelag);
             document.getElementById("soundButton").className = "dead_button";
-            socket.transmitPublish('send_time', {prelag: prelag, playTime: playTime});
+            socket.transmitPublish('send_time', {clientID: data.clientID, prelag: prelag, playTime: playTime, userAgent: nav});
             playSound();
         }
     }

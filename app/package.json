@@ -16,9 +16,11 @@
     "nodemon": "^1.19.4",
     "sc-errors": "^2.0.1",
     "scc-broker-client": "^8.0.0",
+    "sequelize": "^6.3.3",
     "serve-static": "^1.13.2",
     "socketcluster-client": "^16.0.1",
     "socketcluster-server": "^16.0.0",
+    "sqlite3": "^5.0.0",
     "uuid": "^3.3.2"
   },
   "keywords": [

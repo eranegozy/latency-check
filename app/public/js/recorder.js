@@ -28,7 +28,7 @@ audio_xhr.onload = function() {
 }
 audio_xhr.send();
 
-function createMediaRecorder(mediaRecorder, socket, letter, syncClock){
+function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
     //Create MediaRecorder
     // if (navigator.mediaDevices){
     //     navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
@@ -87,6 +87,12 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock){
                     console.log("lag: " + lag2);
 
                     console.log("difference: " + (Math.abs(lag1-lag2)));
+                    if (seq) {
+                        console.log(users);
+                        users[letter].operatorLag.push(lag1);
+                        users[letter].clientLag.push(lag2);
+                        users[letter].differences.push(Math.abs(lag1-lag2)-prelagSamples);
+                    }
 
                     console.log("difference-delay: " + Math.abs((Math.abs(lag1-lag2)-prelagSamples)));
                     const blob = new Blob(chunks, {'type': 'audio/wav'});

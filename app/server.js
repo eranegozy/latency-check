@@ -1,3 +1,6 @@
+const { Sequelize } = require('sequelize');
+const sequelize = new Sequelize('sqlite::memory:')
+
 const http = require('http');
 const eetase = require('eetase');
 const socketClusterServer = require('socketcluster-server');
@@ -66,9 +69,10 @@ expressApp.post('/ua', function(req, res){
     res.status(200).send('OK');
 });
 // Add GET /health-check express route
-expressApp.get('/health-check', (req, res) => {
+expressApp.get('/health-check', function(req, res) {
   res.status(200).send('OK');
 });
+
 
 // HTTP request handling loop.
 (async () => {

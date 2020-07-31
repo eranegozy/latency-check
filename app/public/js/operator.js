@@ -3,7 +3,9 @@ script.src = 'https://code.jquery.com/jquery-3.4.1.min.js';
 script.type = 'text/javascript';
 document.getElementsByTagName('head')[0].appendChild(script);
 
-const serverString = "http://localhost:3000";
+const serverString = window.location.origin;
+console.log(serverString);
+console.log(location.host);
 var users = {}
 const numTests = 3;
 var mediaRecorder;
@@ -25,7 +27,7 @@ if (navigator.mediaDevices){
 const options = {
   // secure: true,
   // hostname: 'localhost',
-  port: 8000,
+//   port: 8000,
   // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
 };
 const socket = socketClusterClient.create(options);
@@ -137,8 +139,9 @@ function send_sequence(letter) {
         // console.log("con" + data.socketID);
         console.log("con" + data.clientID);
         console.log(data);
-        $("#buttonArea").append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
-        $("#buttonArea").append(`<button class="button-square" onclick = "send_sequence('${data.clientID}')" id="${data.clientID}">${data.clientID}</button>`);
+        $("#buttonArea").append(`<div id="buttonArea${data.clientID}"></div>`)
+        $(`#buttonArea${data.clientID}`).append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">Run ${data.clientID} Once</button>`);
+        $(`#buttonArea${data.clientID}`).append(`<button class="button-square" onclick = "send_sequence('${data.clientID}')" id="${data.clientID}">Run ${data.clientID} Sequence</button>`);
         users[data.clientID] = {
             operatorLag: [],
             clientLag: [],
@@ -154,7 +157,7 @@ function send_sequence(letter) {
     for await (let data of disconnected){
         // console.log("dis" + data.socketID)
         console.log("dis" + data.clientID);
-        $(`#${data.clientID}`).remove();
+        $(`#buttonArea${data.clientID}`).remove();
         delete users[data.clientID];
     }
 })();

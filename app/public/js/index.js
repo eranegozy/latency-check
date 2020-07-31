@@ -80,7 +80,7 @@ function playSample(audioContext, audioBuffer) {
 const options = {
     // secure: true,
     // hostname: 'localhost',
-    port: 8000
+    // port: 8000
     // See https://socketcluster.io/#!/docs/api-socketcluster-client for all available options
 };
 

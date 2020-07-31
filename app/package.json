@@ -9,11 +9,14 @@
     }
   ],
   "dependencies": {
+    "concurrently": "^5.2.0",
     "connect": "^3.6.6",
     "eetase": "^4.0.0",
     "express": "^4.16.3",
     "morgan": "^1.7.0",
     "nodemon": "^1.19.4",
+    "pg": "^8.3.0",
+    "pg-hstore": "^2.3.3",
     "sc-errors": "^2.0.1",
     "scc-broker-client": "^8.0.0",
     "sequelize": "^6.3.3",
@@ -32,6 +35,6 @@
   ],
   "readmeFilename": "README.md",
   "scripts": {
-    "start": "nodemon server.js"
+    "start": "node server.js"
   }
 }

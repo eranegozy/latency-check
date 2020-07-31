@@ -1,6 +1,3 @@
-const { Sequelize } = require('sequelize');
-const sequelize = new Sequelize('sqlite::memory:')
-
 const http = require('http');
 const eetase = require('eetase');
 const socketClusterServer = require('socketcluster-server');
@@ -12,7 +9,7 @@ const uuid = require('uuid');
 const sccBrokerClient = require('scc-broker-client');
 
 const ENVIRONMENT = process.env.ENV || 'dev';
-const SOCKETCLUSTER_PORT = process.env.SOCKETCLUSTER_PORT || 8000;
+const SOCKETCLUSTER_PORT = process.env.PORT || process.env.SOCKETCLUSTER_PORT || 8000;
 const SOCKETCLUSTER_WS_ENGINE = process.env.SOCKETCLUSTER_WS_ENGINE || 'ws';
 const SOCKETCLUSTER_SOCKET_CHANNEL_LIMIT = Number(process.env.SOCKETCLUSTER_SOCKET_CHANNEL_LIMIT) || 1000;
 const SOCKETCLUSTER_LOG_LEVEL = process.env.SOCKETCLUSTER_LOG_LEVEL || 2;
@@ -30,6 +27,9 @@ const SCC_STATE_SERVER_ACK_TIMEOUT = Number(process.env.SCC_STATE_SERVER_ACK_TIM
 const SCC_STATE_SERVER_RECONNECT_RANDOMNESS = Number(process.env.SCC_STATE_SERVER_RECONNECT_RANDOMNESS) || null;
 const SCC_PUB_SUB_BATCH_DURATION = Number(process.env.SCC_PUB_SUB_BATCH_DURATION) || null;
 const SCC_BROKER_RETRY_DELAY = Number(process.env.SCC_BROKER_RETRY_DELAY) || null;
+
+const { Sequelize, DataTypes} = require('sequelize');
+const sequelize = new Sequelize(process.env.DATABASE_URL);
 
 let agOptions = {};
 var gBootTime = Date.now();
@@ -72,6 +72,66 @@ expressApp.post('/ua', function(req, res){
 expressApp.get('/health-check', function(req, res) {
   res.status(200).send('OK');
 });
+
+//DB
+const Latency = sequelize.define('Latency', {
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true
+    },
+    averageOperatorLag: {
+        type: DataTypes.FLOAT,
+        allowNull: false
+    },
+    averageClientLag: {
+        type: DataTypes.FLOAT,
+        allowNull: false
+    },
+    averageDifference: {
+        type: DataTypes.FLOAT,
+        allowNull: false
+    },
+    clientPlatform: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    clientUA: {
+        type: DataTypes.STRING,
+        allowNull: false
+    }
+
+},
+{
+    freezeTableName: true, 
+    timestamps: true,
+    updatedAt: false
+});
+
+expressApp.post('/recordTest', async(req, res) => {
+    console.log(req.body);
+    try{
+        await Latency.sync();
+        let data = await Latency.create(req.body)
+        console.log(data);
+        res.sendStatus(200);
+    } catch (e) {
+        console.log(e);
+        res.status(500).send(e);
+    }
+    
+});
+
+(async ()=> {
+    try {
+        await sequelize.authenticate();
+        console.log('Connection has been established successfully.');
+
+      } catch (error) {
+        console.error('Unable to connect to the database:', error);
+      }
+})();
+
 
 
 // HTTP request handling loop.

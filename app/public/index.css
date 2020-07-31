@@ -58,7 +58,7 @@ html {
   .button-square {
     border-color: black;
     width: 150px;
-    height: 150px;
+    height: 30px;
     border-radius: 0%;
     background-color: #E33;
     box-shadow: 0 9px #999;

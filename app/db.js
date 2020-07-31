@@ -1,12 +1,22 @@
-const { Sequelize, DataTypes, Model } = require('sequelize');
+const { Sequelize, DataTypes} = require('sequelize');
+// const sequelize = new Sequelize({
+//     dialect: 'sqlite',
+//     storage: 'latency.db'
+//   });
+console.log(process.env.DATABASE_URL);
+// const sequelize = new Sequelize(process.env.DATABASE_URL);
 const sequelize = new Sequelize({
-    dialect: 'sqlite',
-    storage: 'latency.db'
-  });
+    database: 'jwln',
+    username: 'postgres',
+    password: 'postgres',
+    host: 'localhost',
+    port: 5432,
+    dialect: 'postgres'
+});
 const http = require('http');
 const express = require('express');
 
-let httpServer = http.createServer();
+// let httpServer = http.createServer();
 let expressApp = express();
 
 expressApp.use(express.urlencoded());
@@ -55,10 +65,12 @@ expressApp.post('/recordTest', async(req, res) => {
         await Latency.sync();
         let data = await Latency.create(req.body)
         console.log(data);
+        res.sendStatus(200);
     } catch (e) {
         console.log(e);
+        res.status(500).send(e);
     }
-    res.sendStatus(200);
+    
 });
 
 (async ()=> {
@@ -71,4 +83,4 @@ expressApp.post('/recordTest', async(req, res) => {
       }
 })();
 
-expressApp.listen(3000, ()=>console.log("DB Server listening on port 3000"));
+expressApp.listen(process.env.PORT, ()=>console.log(`DB Server listening on port ${process.env.PORT}`));

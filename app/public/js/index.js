@@ -62,7 +62,7 @@ function playSound(){
     document.getElementById('msg2').innerHTML = "sound played at<br>" + d.toTimeString();
     if (num == socket.id){
         console.log("fist clrick");
-        socket.transmit("firstClick");
+        socket.transmit("firstClick", nav);
     }
 }
 
@@ -100,9 +100,6 @@ const playButton = document.querySelector('.button');
 playButton.addEventListener('click', function() {
     if (document.getElementById("soundButton").className != "dead_button"){
         playSound();
-        if (num == socket.id){
-            socket.transmit("firstClick");
-        }
     }
 }, false);
 

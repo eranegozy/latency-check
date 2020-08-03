@@ -29,6 +29,7 @@ const SCC_PUB_SUB_BATCH_DURATION = Number(process.env.SCC_PUB_SUB_BATCH_DURATION
 const SCC_BROKER_RETRY_DELAY = Number(process.env.SCC_BROKER_RETRY_DELAY) || null;
 
 const { Sequelize, DataTypes} = require('sequelize');
+let sequelize;
 
 let agOptions = {};
 var gBootTime = Date.now();
@@ -45,13 +46,13 @@ let expressApp = express();
 if (ENVIRONMENT === 'dev') {
   // Log every HTTP request. See https://github.com/expressjs/morgan for other
   // available formats.
-  const sequelize = new Sequelize({
+    sequelize = new Sequelize({
     dialect: 'sqlite',
     storage: 'latency.db'
   });
   expressApp.use(morgan('dev'));
 } else {
-    const sequelize = new Sequelize(process.env.DATABASE_URL);
+    sequelize = new Sequelize(process.env.DATABASE_URL);
 }
 expressApp.use(serveStatic(path.resolve(__dirname, 'public')));
 expressApp.use(express.urlencoded());
@@ -159,8 +160,7 @@ var clients = new Array(26).fill(0);
             clientID = String.fromCharCode(clientID.charCodeAt(0) + 1);
         }
         clients[num] = clientID;
-        await agServer.exchange.transmitPublish("connected", 
-        {"clientID": clientID, "socketID": socket.id});
+        
         (async () => {
             for await (let data of socket.listener('disconnect')) {
                 agServer.exchange.transmitPublish("disconnected", {"clientID": clientID, "socketID": socket.id});
@@ -170,7 +170,9 @@ var clients = new Array(26).fill(0);
 
         (async () => {
             for await (let data of socket.receiver('firstClick')) {
-                agServer.exchange.transmitPublish("updateID", {"clientID": clientID, "socketID": socket.id});
+                await agServer.exchange.transmitPublish("updateID", {"clientID": clientID, "socketID": socket.id});
+                console.log(data);
+                await agServer.exchange.transmitPublish("connected", {"clientID": clientID, "socketID": socket.id, "userAgent": data});
             }
         })();
   }

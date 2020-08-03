@@ -76,13 +76,13 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     // console.log(prelagSamples);
 
                     //convert samples to ms
-                    lag1 = lag1 / 44.1;
-                    lag2 = lag2 / 44.1;
+                    // lag1 = lag1 / 44.1;
+                    // lag2 = lag2 / 44.1;
                     document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> operatorLag: ' + lag1 + '<b><br>';
 
                     document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> clientLag: ' + lag2 + '<b><br>';
 
-                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> difference: ' + Math.abs((Math.abs(lag1-lag2) - prelagSamples)) + '<b><br>';
+                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> difference: ' + Math.abs((Math.abs(lag1-lag2) - prelagMS)) + '<b><br>';
 
                     console.log("oLag: " + lag1);
 
@@ -93,10 +93,10 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                         console.log(users);
                         users[letter].operatorLag.push(lag1);
                         users[letter].clientLag.push(lag2);
-                        users[letter].differences.push(Math.abs(Math.abs(lag1-lag2)-prelagSamples));
+                        users[letter].differences.push(Math.abs(Math.abs(lag1-lag2)-prelagMS));
                     }
 
-                    console.log("difference-delay: " + Math.abs((Math.abs(lag1-lag2)-prelagSamples)));
+                    console.log("difference-delay: " + Math.abs((Math.abs(lag1-lag2)-prelagMS)));
                     const blob = new Blob(chunks, {'type': 'audio/wav'});
                     chunks = [];
 

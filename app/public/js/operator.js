@@ -139,15 +139,18 @@ function send_sequence(letter) {
         // console.log("con" + data.socketID);
         console.log("con" + data.clientID);
         console.log(data);
+        let clientUA = data.userAgent.ua.slice(data.userAgent.ua.indexOf('('), data.userAgent.ua.indexOf(')')+1);
+        console.log(clientUA);
         $("#buttonArea").append(`<div id="buttonArea${data.clientID}"></div>`)
+        $(`#buttonArea${data.clientID}`).append(`<p>${clientUA}</p>`);
         $(`#buttonArea${data.clientID}`).append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">Run ${data.clientID} Once</button>`);
         $(`#buttonArea${data.clientID}`).append(`<button class="button-square" onclick = "send_sequence('${data.clientID}')" id="${data.clientID}">Run ${data.clientID} Sequence</button>`);
         users[data.clientID] = {
             operatorLag: [],
             clientLag: [],
             differences: [],
-            platform: "",
-            userAgent: ""
+            platform: data.userAgent.platform,
+            userAgent: data.userAgent.ua
         }
         
     }
@@ -162,13 +165,13 @@ function send_sequence(letter) {
     }
 })();
 
-var prelagSamples;
+var prelagMS;
 (async() => {
     for await (let data of send_time) {
         console.log(data.prelag);
-        prelagSamples = data.prelag * 500 * 44.1;
+        prelagMS = data.prelag * 1000;
         console.log('prelag', data.prelag);
-        console.log('samples', prelagSamples);
+        console.log('samples', prelagMS);
         if (users[data.clientID].userAgent == ""){
             console.log('we got here');
             users[data.clientID].userAgent = data.userAgent.ua;

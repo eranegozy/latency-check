@@ -89,7 +89,7 @@ function send_play(letter, seq=false) {
         let t2 = performance.now() - t1;
         socket.transmitPublish('play', {clientID: letter, serverTime: serverTime, t2: t2});
         console.log(t2);
-    }, 500);
+    }, 250);
     // createMediaRecorder(socket, letter);
     // socket.transmitPublish('finishedPlaying', letter);
 }
@@ -166,7 +166,7 @@ var prelagSamples;
 (async() => {
     for await (let data of send_time) {
         console.log(data.prelag);
-        prelagSamples = data.prelag * 1000 * 44.1;
+        prelagSamples = data.prelag * 500 * 44.1;
         console.log('prelag', data.prelag);
         console.log('samples', prelagSamples);
         if (users[data.clientID].userAgent == ""){

@@ -29,7 +29,6 @@ const SCC_PUB_SUB_BATCH_DURATION = Number(process.env.SCC_PUB_SUB_BATCH_DURATION
 const SCC_BROKER_RETRY_DELAY = Number(process.env.SCC_BROKER_RETRY_DELAY) || null;
 
 const { Sequelize, DataTypes} = require('sequelize');
-const sequelize = new Sequelize(process.env.DATABASE_URL);
 
 let agOptions = {};
 var gBootTime = Date.now();
@@ -46,7 +45,13 @@ let expressApp = express();
 if (ENVIRONMENT === 'dev') {
   // Log every HTTP request. See https://github.com/expressjs/morgan for other
   // available formats.
+  const sequelize = new Sequelize({
+    dialect: 'sqlite',
+    storage: 'latency.db'
+  });
   expressApp.use(morgan('dev'));
+} else {
+    const sequelize = new Sequelize(process.env.DATABASE_URL);
 }
 expressApp.use(serveStatic(path.resolve(__dirname, 'public')));
 expressApp.use(express.urlencoded());

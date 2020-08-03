@@ -37,7 +37,7 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
             console.log('starting Media Recorder')
             mediaRecorder.start();
 
-            setTimeout(() => {mediaRecorder.stop();}, 1000);
+            setTimeout(() => {mediaRecorder.stop();}, 500);
             let chunks = [];
 
             mediaRecorder.ondataavailable = function(e){
@@ -56,7 +56,7 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     //rec-recorded
                     //org-original
                     var rec = theBuffer.getChannelData(0);
-                    var halfTime = 500 * 44.1
+                    var halfTime = 250 * 44.1
                     var firstHalf = rec.slice(0, halfTime);
                     var secondHalf = rec.slice(halfTime+1, rec.length);
                     console.log(firstHalf.length);
@@ -74,24 +74,26 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     let lag1 = am1 - org.length + 1;
                     let lag2 = am2 - org.length + 1;
                     // console.log(prelagSamples);
-                    document.getElementById("lag_time").innerHTML += '<br><b> lag: ' + lag1 + '<b><br>';
 
-                    document.getElementById("lag_time").innerHTML += '<br><b> lag: ' + lag2 + '<b><br>';
+                    //convert samples to ms
+                    lag1 = lag1 / 44.1;
+                    lag2 = lag2 / 44.1;
+                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> operatorLag: ' + lag1 + '<b><br>';
 
-                    document.getElementById("lag_time").innerHTML += '<br><b> difference: ' + Math.abs(lag1-lag2) + '<b><br>';
+                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> clientLag: ' + lag2 + '<b><br>';
 
-                    document.getElementById("lag_time").innerHTML += '<br><b> difference-delay: ' + (Math.abs(lag1-lag2) - prelagSamples) + '<b><br>';
+                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> difference: ' + Math.abs((Math.abs(lag1-lag2) - prelagSamples)) + '<b><br>';
 
-                    console.log("lag: " + lag1);
+                    console.log("oLag: " + lag1);
 
-                    console.log("lag: " + lag2);
+                    console.log("cLag: " + lag2);
 
                     console.log("difference: " + (Math.abs(lag1-lag2)));
                     if (seq) {
                         console.log(users);
                         users[letter].operatorLag.push(lag1);
                         users[letter].clientLag.push(lag2);
-                        users[letter].differences.push(Math.abs(lag1-lag2)-prelagSamples);
+                        users[letter].differences.push(Math.abs(Math.abs(lag1-lag2)-prelagSamples));
                     }
 
                     console.log("difference-delay: " + Math.abs((Math.abs(lag1-lag2)-prelagSamples)));

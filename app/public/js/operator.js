@@ -145,10 +145,12 @@ function send_sequence(letter) {
         $(`#buttonArea${data.clientID}`).append(`<p>${clientUA}</p>`);
         $(`#buttonArea${data.clientID}`).append(`<button class="button" onclick = "send_play('${data.clientID}')" id="${data.clientID}">Run ${data.clientID} Once</button>`);
         $(`#buttonArea${data.clientID}`).append(`<button class="button-square" onclick = "send_sequence('${data.clientID}')" id="${data.clientID}">Run ${data.clientID} Sequence</button>`);
+        $(`#buttonArea${data.clientID}`).append(`<div id="buttonArea${data.clientID}times"></div>`);
         users[data.clientID] = {
             operatorLag: [],
             clientLag: [],
             differences: [],
+            averageDifferences: [],
             platform: data.userAgent.platform,
             userAgent: data.userAgent.ua
         }

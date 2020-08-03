@@ -27,7 +27,7 @@ audio_xhr.onload = function() {
     });
 }
 audio_xhr.send();
-
+let average = (array) => array.reduce((a, b) => a + b) / array.length;
 function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
     //Create MediaRecorder
     // if (navigator.mediaDevices){
@@ -76,13 +76,13 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     // console.log(prelagSamples);
 
                     //convert samples to ms
-                    // lag1 = lag1 / 44.1;
-                    // lag2 = lag2 / 44.1;
-                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> operatorLag: ' + lag1 + '<b><br>';
+                    lag1 = lag1 / 44.1;
+                    lag2 = lag2 / 44.1;
+                    document.getElementById(`buttonArea${letter}times`).innerHTML = '<br><b> operatorLag: ' + lag1 + '<b><br>';
 
-                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> clientLag: ' + lag2 + '<b><br>';
+                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> clientLag: ' + lag2 + '<b><br>';
 
-                    document.getElementById(`buttonArea${letter}`).innerHTML += '<br><b> difference: ' + Math.abs((Math.abs(lag1-lag2) - prelagMS)) + '<b><br>';
+                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> difference: ' + Math.abs((Math.abs(lag1-lag2) - prelagMS)) + '<b><br>';
 
                     console.log("oLag: " + lag1);
 
@@ -93,9 +93,10 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                         console.log(users);
                         users[letter].operatorLag.push(lag1);
                         users[letter].clientLag.push(lag2);
-                        users[letter].differences.push(Math.abs(Math.abs(lag1-lag2)-prelagMS));
+                        users[letter].differences.push(Math.abs((Math.abs(lag1-lag2) - prelagMS)));
                     }
-
+                    users[letter].averageDifferences.push(Math.abs((Math.abs(lag1-lag2) - prelagMS)));
+                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> accumulated average difference: ' + average(users[letter].averageDifferences)+'</b><br>'
                     console.log("difference-delay: " + Math.abs((Math.abs(lag1-lag2)-prelagMS)));
                     const blob = new Blob(chunks, {'type': 'audio/wav'});
                     chunks = [];

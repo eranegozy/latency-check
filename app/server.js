@@ -61,6 +61,10 @@ expressApp.use(express.json());
 expressApp.get('/operator', function(req, res){
     res.sendFile(path.join(__dirname + '/public/password.html'));
 });
+
+expressApp.get('/results', function(req, res){
+    res.sendFile(path.join(__dirname + '/public/results.html'));
+});
     
 expressApp.post('/controller', function(req, res){
     if (req.body.password == 'lagpolice') {
@@ -119,7 +123,7 @@ expressApp.post('/recordTest', async(req, res) => {
     try{
         await Latency.sync();
         let data = await Latency.create(req.body)
-        console.log(data);
+        // console.log(data);
         res.sendStatus(200);
     } catch (e) {
         console.log(e);
@@ -128,11 +132,12 @@ expressApp.post('/recordTest', async(req, res) => {
     
 });
 
-expressApp.get('/results', async function(req, res){
+expressApp.post('/results', async function(req, res){
     // Find all users
     const things = await Latency.findAll();
     console.log("All users:", JSON.stringify(things, null, 2));
-    res.status(200).send(JSON.stringify(things, null, 2));
+    res.status(200).send(things);
+    // res.status(200).send(JSON.stringify(things, null, 2));
 });
 
 (async ()=> {

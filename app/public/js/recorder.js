@@ -78,11 +78,11 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     //convert samples to ms
                     lag1 = lag1 / 44.1;
                     lag2 = lag2 / 44.1;
-                    document.getElementById(`buttonArea${letter}times`).innerHTML = '<br><b> operatorLag: ' + lag1 + '<b><br>';
+                    document.getElementById(`buttonArea${letter}times`).innerHTML = '<br><b> operatorLag: ' + lag1.toFixed(3) + 'ms<b><br>';
 
-                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> clientLag: ' + lag2 + '<b><br>';
+                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> clientLag: ' + lag2.toFixed(3) + 'ms<b><br>';
 
-                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> difference: ' + Math.abs((Math.abs(lag1-lag2) - prelagMS)) + '<b><br>';
+                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> difference: ' + Math.abs((Math.abs(lag1-lag2) - prelagMS)).toFixed(3) + 'ms<b><br>';
 
                     console.log("oLag: " + lag1);
 
@@ -96,7 +96,7 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                         users[letter].differences.push(Math.abs((Math.abs(lag1-lag2) - prelagMS)));
                     }
                     users[letter].averageDifferences.push(Math.abs((Math.abs(lag1-lag2) - prelagMS)));
-                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> accumulated average difference: ' + average(users[letter].averageDifferences)+'</b><br>'
+                    document.getElementById(`buttonArea${letter}times`).innerHTML += '<br><b> accumulated average difference: ' + average(users[letter].averageDifferences).toFixed(3)+'ms</b><br>'
                     console.log("difference-delay: " + Math.abs((Math.abs(lag1-lag2)-prelagMS)));
                     const blob = new Blob(chunks, {'type': 'audio/wav'});
                     chunks = [];

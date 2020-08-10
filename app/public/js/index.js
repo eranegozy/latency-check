@@ -10,19 +10,27 @@ var nav = {
     ua: navigator.userAgent
 };
 
-navigator.mediaDevices.enumerateDevices()
-.then(function(devices) {
-    // console.log(devices)
-  devices.forEach(function(device) {
-    // console.log(device.deviceId);
-    if (device.deviceId == 'default' && device.kind == 'audiooutput')
-        nav.sound_device = device.label.slice(10, device.label.length);
-  });
-})
-.catch(function(err) {
-  console.log(err.name + ": " + err.message);
-  nav.sound_device = 'unknown';
-});
+if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    console.log("enumerateDevices() not supported.");
+    nav.sound_device = 'unknown';
+}
+else {
+    console.log(navigator.mediaDevices);
+    navigator.mediaDevices.enumerateDevices()
+    .then(function(devices) {
+        // console.log(devices)
+    devices.forEach(function(device) {
+        // console.log(device.deviceId);
+        if (device.deviceId == 'default' && device.kind == 'audiooutput')
+            nav.sound_device = device.label.slice(10, device.label.length);
+    });
+    })
+    .catch(function(err) {
+    console.log(err.name + ": " + err.message);
+    nav.sound_device = 'unknown';
+    });
+}
+
 // var xhr = new XMLHttpRequest();
 // xhr.open("POST", '/ua');
 // xhr.setRequestHeader('Content-Type', 'application/json');

@@ -109,6 +109,9 @@ const Latency = sequelize.define('Latency', {
     clientUA: {
         type: DataTypes.STRING,
         allowNull: false
+    },
+    clientSoundDevice: {
+        type: DataTypes.STRING,
     }
 
 },
@@ -121,7 +124,7 @@ const Latency = sequelize.define('Latency', {
 expressApp.post('/recordTest', async(req, res) => {
     console.log(req.body);
     try{
-        await Latency.sync();
+        await Latency.sync({alter: true});
         let data = await Latency.create(req.body)
         // console.log(data);
         res.sendStatus(200);

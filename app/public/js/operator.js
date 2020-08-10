@@ -101,11 +101,12 @@ function send_sequence(letter) {
     if (count > numTests){
         let average = (array) => array.reduce((a, b) => a + b) / array.length;
         let postData = {
-            averageOperatorLag: average(users[letter].operatorLag),
-            averageClientLag: average(users[letter].clientLag),
-            averageDifference: average(users[letter].differences),
+            averageOperatorLag: average(users[letter].operatorLag).toFixed(3),
+            averageClientLag: average(users[letter].clientLag).toFixed(3),
+            averageDifference: average(users[letter].differences).toFixed(3),
             clientPlatform: users[letter].platform,
-            clientUA: users[letter].userAgent
+            clientUA: users[letter].userAgent,
+            clientSoundDevice: users[letter].soundDevice
         };
         $.post(serverString+"/recordTest", postData,
             function(data, response){
@@ -152,7 +153,8 @@ function send_sequence(letter) {
             differences: [],
             averageDifferences: [],
             platform: data.userAgent.platform,
-            userAgent: data.userAgent.ua
+            userAgent: data.userAgent.ua,
+            soundDevice: data.userAgent.sound_device
         }
         
     }

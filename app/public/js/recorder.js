@@ -61,9 +61,15 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     var secondHalf = rec.slice(halfTime+1, rec.length);
                     console.log(firstHalf.length);
                     console.log(secondHalf.length);
-                    
-                    var org = buffer.getChannelData(0).slice(0,firstHalf.length);
-                    
+
+                    var org = buffer.getChannelData(0)
+                    if (org.length > firstHalf.length){
+                        org = org.slice(0,firstHalf.length);
+                    }
+                    else{
+                        firstHalf = firstHalf.slice(0, org.length);
+                        secondHalf = secondHalf.slice(0, org.length);
+                    }
                     org.reverse();
 
                     let c1 = conv(firstHalf, org);

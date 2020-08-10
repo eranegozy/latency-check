@@ -18,26 +18,33 @@ def xcor(file1, file2):
 	original_data = read(file1)
 	delayed_data = read(file2)
 
+	print ("original data length: ", len(original_data[1]))
+	print ("delayed data length: ", len(delayed_data[1]))
+
 	if delayed_data[0] != 44100:
 		print ('ERROR SR {}'.format(delayed_data[0]))
 		return
 
-	delayed = delayed_data[1]
-	original = original_data[1][:len(delayed)]
+	if len(delayed_data[1]) < len(original_data[1]):
+		delayed = delayed_data[1]
+		original = original_data[1][:len(delayed)]
+	else:
+		original = original_data[1]
+		delayed = delayed_data[1][:len(original)]
 	
-	print (len(original))
-	print (len(delayed))
+	print ("adjusted original length: ", len(original))
+	print ("adjusted delayed length: ", len(delayed))
 	
 	corr = correlate(delayed, original, "full")
 	conv = convolve(delayed, np.flipud(original), "full")
 	shift = len(delayed)
 	lag = np.argmax(corr) - shift + 1
 
-	print (lag)
-	print (corr)
-	print (len(corr))
-	print (conv)
-	print (len(conv))
+	print ("lag: ", lag)
+	# print (corr)
+	# print (len(corr))
+	# print (conv)
+	# print (len(conv))
 
 	plt.xcorr(delayed, original, usevlines=True, maxlags=None, normed=True, lw=1.5)
 	plt.grid(True)
@@ -54,7 +61,7 @@ def xcor(file1, file2):
 	
 	return lag
 
-# lag = xcor('./app/public/audio/chirp.wav', './app/public/audio/noise_mixed_chirp.wav')
+# lag = xcor('./app/public/audio/chirp.wav', './app/public/audio/noise_and_chirp_long.wav')
 
 # lag = xcor('./app/public/audio/chirp.wav', './app/public/audio/noise_mixed_distort.wav')
 

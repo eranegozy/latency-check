@@ -1,15 +1,10 @@
-// const num = Math.floor(Math.random()*1000000);
-
 const audio_filename = 'audio/chirp.wav';
 var nav = {
-    // num: num,
-    // codename: navigator.appCodeName,
-    // name: navigator.appName,
-    // version: navigator.appVersion,
     platform: navigator.platform,
     ua: navigator.userAgent
 };
 
+//add sound device info if possible
 if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
     console.log("enumerateDevices() not supported.");
     nav.sound_device = 'unknown';
@@ -31,11 +26,6 @@ else {
     });
 }
 
-// var xhr = new XMLHttpRequest();
-// xhr.open("POST", '/ua');
-// xhr.setRequestHeader('Content-Type', 'application/json');
-// xhr.send(JSON.stringify(nav));
-
 // Setup audio context
 var audioContext, buffer;
 try{
@@ -44,8 +34,9 @@ try{
     audioContext = new AudioContext();
 }
 
+//print error on screen
 window.onerror = function (msg, url, lineNo, columnNo, error) {
-    document.getElementById('e_msg').innerHTML += msg + "<br>";
+    document.getElementById('e_msg').innerHTML = msg + "<br>";
     document.getElementById('e_msg').innerHTML += "refresh the page <br>";
 };
 
@@ -109,6 +100,8 @@ var syncClock;
 requirejs(["js/syncclock"], function(clock) {
     syncClock = new clock.SyncClock(socket);
 });
+
+//global clock
 function updateTime(){
     if (syncClock != null)
         document.getElementById('time').innerHTML = syncClock.getTime().toFixed(3);
@@ -123,23 +116,30 @@ playButton.addEventListener('click', function() {
     }
 }, false);
 
+//on play received from the operator
 (async() => {
     let recieved_play = socket.subscribe('play');
-    // Send time and ID number to operator
     for await (let data of recieved_play) {
         if (data.clientID == num){
+            //calculate latency
             let playTime = syncClock.getTime();
             let prelag = playTime-data.serverTime-(data.t2/1000);
-            console.log(playTime);
-            console.log(data.serverTime);
-            console.log(prelag);
+            // console.log(playTime);
+            // console.log(data.serverTime);
+            // console.log(prelag);
             document.getElementById("soundButton").className = "dead_button";
-            socket.transmitPublish('send_time', {clientID: data.clientID, prelag: prelag, playTime: playTime, userAgent: nav});
+            socket.transmitPublish('send_time', {
+                clientID: data.clientID, 
+                prelag: prelag, 
+                playTime: playTime, 
+                userAgent: nav
+            });
             playSound();
         }
     }
 })();
 
+// on all calculations finished on the operator side
 (async() => {
     let finished_play = socket.subscribe('finishedPlaying');
     // Send time and ID number to operator
@@ -167,7 +167,7 @@ playButton.addEventListener('click', function() {
     for await (let err of socket.listener('error')) {
         // socket.publish('removeButton', {id:num, err:err});
         console.error(err);
-        document.getElementById('e_msg').innerHTML += err + '<br>';
+        document.getElementById('e_msg').innerHTML = err + '<br>';
         document.getElementById('e_msg').innerHTML += "refresh the page <br>";   
     }
 })();
@@ -187,17 +187,19 @@ playButton.addEventListener('click', function() {
     }
 })();
 
-(async() => {
-    for await (let data of socket.listener('disconnect')){
-        console.log("help Im gone now");
-        // socket.transmit('removeButton');
-    }
-})();
+// DEBUG 
+// print out data on connect and disconnect
+// (async() => {
+//     for await (let data of socket.listener('disconnect')){
+//         console.log("help Im gone now");
+//         // socket.transmit('removeButton');
+//     }
+// })();
 
-(async () => {
-    let connected = socket.subscribe("connected");
-    console.log("help im tryung to connect")
-    for await (let data of connected){
-        console.log(data);
-    }
-})();
+// (async () => {
+//     let connected = socket.subscribe("connected");
+//     console.log("help im tryung to connect")
+//     for await (let data of connected){
+//         console.log(data);
+//     }
+// })();

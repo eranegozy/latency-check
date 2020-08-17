@@ -1,14 +1,7 @@
 var cTime, audioContext, wav;
 var opt = {};
 
-// var constraints = {
-//   audio: {
-//     //sampleRate: 44100
-//   },
-//   video: false
-// };
-
-var original_sound_path = 'audio/chirp.wav';
+const original_sound_path = 'audio/chirp.wav';
 
 try{
   audioContext = new webkitAudioContext({sampleRate: 44100});
@@ -28,16 +21,17 @@ audio_xhr.onload = function() {
 }
 audio_xhr.send();
 let average = (array) => array.reduce((a, b) => a + b) / array.length;
-function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
+// Hardcoded recorder to run for recordLength*2 milliseconds
+function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq, recordLength){
     //Create MediaRecorder
     // if (navigator.mediaDevices){
     //     navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
 
-            //start recording for 500ms
+            //start recording for (recordLength * 2) ms
             console.log('starting Media Recorder')
             mediaRecorder.start();
 
-            setTimeout(() => {mediaRecorder.stop();}, 500);
+            setTimeout(() => {mediaRecorder.stop();}, recordLength*2);
             let chunks = [];
 
             mediaRecorder.ondataavailable = function(e){
@@ -51,18 +45,14 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                 promise.then(value=>audioContext.decodeAudioData(value, function(theBuffer){
                     wav = audioBufferToWav(theBuffer, 3);
                     chunks.push(wav);
-                    //21167
-                    //42335
                     //rec-recorded
                     //org-original
-                    var rec = theBuffer.getChannelData(0);
-                    var halfTime = 250 * 44.1
-                    var firstHalf = rec.slice(0, halfTime);
-                    var secondHalf = rec.slice(halfTime+1, rec.length);
-                    console.log(firstHalf.length);
-                    console.log(secondHalf.length);
+                    let rec = theBuffer.getChannelData(0);
+                    let halfTime = recordLength * 44.1
+                    let firstHalf = rec.slice(0, halfTime);
+                    let secondHalf = rec.slice(halfTime+1, rec.length);
 
-                    var org = buffer.getChannelData(0)
+                    let org = buffer.getChannelData(0);
                     if (org.length > firstHalf.length){
                         org = org.slice(0,firstHalf.length);
                     }
@@ -72,6 +62,8 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     }
                     org.reverse();
 
+                    // calculate xcorr of both first half and second half
+                    // then compare
                     let c1 = conv(firstHalf, org);
                     let c2 = conv(secondHalf, org);
                     let am1 = argMax(c1);
@@ -79,7 +71,6 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     console.log('Calculation Finished')
                     let lag1 = am1 - org.length + 1;
                     let lag2 = am2 - org.length + 1;
-                    // console.log(prelagSamples);
 
                     //convert samples to ms
                     lag1 = lag1 / 44.1;
@@ -94,7 +85,6 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
 
                     console.log("cLag: " + lag2);
 
-                    console.log("difference: " + (Math.abs(lag1-lag2)));
                     if (seq) {
                         console.log(users);
                         users[letter].operatorLag.push(lag1);
@@ -117,14 +107,10 @@ function createMediaRecorder(mediaRecorder, socket, letter, syncClock, seq){
                     a.setAttribute("id", "downloadlink");
                     a.innerHTML = "download sound file";
                     document.getElementById("lag_time").appendChild(a);
-                    // document.getElementsByClassName("container")[0].appendChild(a);
 
                     socket.transmitPublish("finishedPlaying", letter)
                     console.log("All Done");
-                    // a.click();
                 })); 
             }
-        // });
 
-    // }
 }

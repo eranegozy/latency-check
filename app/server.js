@@ -44,8 +44,6 @@ let agServer = socketClusterServer.attach(httpServer, agOptions);
 
 let expressApp = express();
 if (ENVIRONMENT === 'dev') {
-  // Log every HTTP request. See https://github.com/expressjs/morgan for other
-  // available formats.
     sequelize = new Sequelize({
     dialect: 'sqlite',
     storage: 'latency.db'
@@ -137,6 +135,7 @@ expressApp.post('/recordTest', async(req, res) => {
 
 expressApp.post('/results', async function(req, res){
     // Find all users
+    // await Latency.drop();
     const things = await Latency.findAll();
     console.log("All users:", JSON.stringify(things, null, 2));
     res.status(200).send(things);
